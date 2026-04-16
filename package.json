@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "tunnel": "ngrok http --url=felipa-numinous-valrie.ngrok-free.dev 3000"
+    "tunnel": "ngrok http --url=felipa-numinous-valrie.ngrok-free.dev 3000",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@mentra/sdk": "*",
@@ -16,6 +18,7 @@
   "devDependencies": {
     "@types/express": "^5.0.1",
     "@types/node": "^22.13.14",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "bun-types": "latest"
   }
 }

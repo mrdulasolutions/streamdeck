@@ -1,0 +1,72 @@
+name: "Bug report"
+description: "Something isn't working as expected"
+title: "[Bug]: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report for StreamDeck for MentraOS.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I am using the latest `main` branch of this repo
+          required: true
+        - label: I have searched existing issues for duplicates
+          required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "Describe your environment (MentraOS version, glasses model, phone OS, Bun version, etc.)"
+      placeholder: "MentraOS vX.Y, Mentra Live glasses, iOS 18, Bun 1.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: "What happened, and what did you expect to happen?"
+      placeholder: "When I tap Go Live with YouTube configured, I see a black screen on YouTube Studio..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: "Exact steps so we can reproduce the issue."
+      placeholder: |
+        1. Open StreamDeck on Mentra Live
+        2. Add a YouTube destination
+        3. Tap Go Live
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs & console output
+      description: "Paste any relevant terminal logs or browser console output. Please remove secrets (API keys, stream keys) before posting."
+      render: bash
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / recordings
+      description: "Optional but very helpful for debugging UI issues."
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: "Anything else we should know?"
+

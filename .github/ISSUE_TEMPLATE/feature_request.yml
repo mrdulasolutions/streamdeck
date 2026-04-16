@@ -1,0 +1,50 @@
+name: "Feature request"
+description: "Suggest an idea or improvement for StreamDeck"
+title: "[Feature]: "
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make StreamDeck better.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I have checked existing issues and discussions for similar requests
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: "Describe the pain point or limitation you're running into today."
+      placeholder: "When I'm streaming IRL, I need a way to quickly mute all destinations at once..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: "What would the ideal solution look like in StreamDeck?"
+      placeholder: "Add a global mute button in the header that..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: "Have you tried any workarounds or other tools?"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: "Anything else we should know? Links, mockups, related issues, etc."
+

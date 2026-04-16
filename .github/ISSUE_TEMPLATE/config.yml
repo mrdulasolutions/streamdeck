@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+contact_links:
+  - name: MentraOS community
+    url: https://github.com/Mentra-Community/MentraOS/discussions
+    about: Questions about MentraOS itself (SDK, OS, hardware).
+
