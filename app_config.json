@@ -1,0 +1,22 @@
+{
+  "description": "StreamDeck — Live stream with Mentra with true 16:9. Single or relay streaming app.",
+  "permissions": [
+    {
+      "type": "CAMERA",
+      "description": "Stream video from glasses camera"
+    },
+    {
+      "type": "MICROPHONE",
+      "description": "Stream audio from glasses microphone"
+    }
+  ],
+  "settings": [
+    {
+      "type": "text",
+      "key": "rtmp_url",
+      "label": "RTMP URL (e.g. rtmp://a.rtmp.youtube.com/live2/YOUR_KEY)",
+      "defaultValue": ""
+    }
+  ],
+  "tools": []
+}

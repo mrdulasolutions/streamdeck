@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamDeck</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+    }
+
+    /* === TOOLBAR === */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #fff;
+      border-bottom: 1px solid #e5e5e7;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 10px; }
+    .toolbar-title { font-size: 17px; font-weight: 600; }
+    .toolbar-right { display: flex; align-items: center; gap: 8px; }
+    .toolbar-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .toolbar-btn:hover { background: #e8e8ed; }
+    .toolbar-btn.active { background: #007aff; color: #fff; }
+
+    /* === STATUS BAR === */
+    .status-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #fff;
+      border-bottom: 1px solid #e5e5e7;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.stopped { background: #86868b; }
+    .status-dot.initializing { background: #ff9f0a; animation: pulse 1s infinite; }
+    .status-dot.active { background: #30d158; animation: pulse 1.5s infinite; }
+    .status-dot.streaming { background: #30d158; animation: pulse 1.5s infinite; }
+    .status-dot.error { background: #ff453a; }
+    .status-dot.reconnecting { background: #ff9f0a; animation: pulse 0.5s infinite; }
+    .status-label { font-size: 13px; color: #86868b; flex: 1; }
+    .status-label.live { color: #30d158; font-weight: 600; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* === CONTENT === */
+    .content { padding: 16px; }
+
+    /* === PREVIEW === */
+    .preview-card {
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      aspect-ratio: 16/9;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preview-card video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .preview-placeholder {
+      color: #555;
+      font-size: 14px;
+      text-align: center;
+    }
+    .preview-placeholder svg { width: 40px; height: 40px; margin-bottom: 8px; opacity: 0.3; }
+    .preview-live-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #ff453a;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: none;
+    }
+    .preview-live-badge.visible { display: block; }
+    .preview-btn {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      backdrop-filter: blur(8px);
+    }
+    .preview-btn:hover { background: rgba(255,255,255,0.25); }
+
+    /* === SECTION === */
+    .section { margin-bottom: 20px; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-title { font-size: 13px; font-weight: 600; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* === PLATFORM CARDS === */
+    .platform-list { display: flex; flex-direction: column; gap: 8px; }
+    .platform-card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e5e5e7;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .platform-card.selected { border-color: #007aff; }
+    .platform-card.is-live { border-color: #30d158; }
+
+    .platform-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+    .platform-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .platform-icon.x { background: #000; color: #fff; }
+    .platform-icon.youtube { background: #ff0000; color: #fff; }
+    .platform-icon.twitch { background: #9146ff; color: #fff; }
+    .platform-icon.instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; }
+    .platform-icon.kick { background: #53fc18; color: #000; }
+    .platform-icon.custom { background: #e5e5e7; color: #86868b; }
+
+    .platform-info { flex: 1; min-width: 0; }
+    .platform-name { font-size: 15px; font-weight: 500; }
+    .platform-status { font-size: 12px; color: #86868b; }
+    .platform-status.configured { color: #30d158; }
+    .platform-status.live { color: #30d158; font-weight: 600; }
+
+    .platform-toggle {
+      position: relative;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 2px solid #d1d1d6;
+      background: #fff;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .platform-toggle.checked {
+      border-color: #007aff;
+      background: #007aff;
+    }
+    .platform-toggle.checked::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 6px;
+      width: 5px; height: 9px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    .platform-config {
+      padding: 0 14px 14px 14px;
+      display: none;
+    }
+    .platform-config.open { display: block; }
+
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 12px; color: #86868b; margin-bottom: 4px; font-weight: 500; }
+    .field input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #f5f5f7;
+      border: 1px solid #e5e5e7;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #1d1d1f;
+      outline: none;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .field input:focus { border-color: #007aff; background: #fff; }
+    .field input::placeholder { color: #c7c7cc; }
+
+    .field-row { display: flex; gap: 8px; }
+    .field-row .field { flex: 1; }
+
+    /* === ADD PLATFORM === */
+    .add-platform-bar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 10px 0;
+    }
+    .add-chip {
+      padding: 6px 12px;
+      border-radius: 16px;
+      border: 1px dashed #d1d1d6;
+      background: #fff;
+      font-size: 13px;
+      color: #86868b;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .add-chip:hover { border-color: #007aff; color: #007aff; }
+
+    /* === RESOLUTION === */
+    .resolution-row { display: flex; gap: 6px; }
+    .res-chip {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      border-radius: 8px;
+      border: 1px solid #e5e5e7;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .res-chip:hover { border-color: #007aff; }
+    .res-chip.active { border-color: #007aff; background: #eef4ff; color: #007aff; }
+    .res-chip .res-detail { font-size: 11px; color: #86868b; font-weight: 400; }
+    .res-chip.active .res-detail { color: #007aff; }
+
+    /* === GO LIVE BUTTON === */
+    .go-live-section { padding: 0 16px 24px; }
+    .btn-live {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-live:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-live.start { background: #30d158; color: #fff; }
+    .btn-live.start:hover:not(:disabled) { background: #28b84c; }
+    .btn-live.stop { background: #ff453a; color: #fff; }
+    .btn-live.stop:hover:not(:disabled) { background: #e03e34; }
+
+    .error-text { color: #ff453a; font-size: 13px; margin-top: 8px; text-align: center; }
+
+    /* === REMOVE BTN === */
+    .remove-btn {
+      padding: 6px 10px;
+      border: none;
+      background: none;
+      color: #ff453a;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .remove-btn:hover { background: #fff0f0; }
+  </style>
+</head>
+<body>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <span class="toolbar-title">StreamDeck</span>
+    </div>
+    <div class="toolbar-right">
+      <button class="toolbar-btn" id="previewToggle" onclick="togglePreview()" title="Preview">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button class="toolbar-btn" id="settingsToggle" onclick="toggleSettings()" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Status strip -->
+  <div class="status-strip">
+    <div class="status-dot stopped" id="statusDot"></div>
+    <span class="status-label" id="statusLabel">Ready</span>
+  </div>
+
+  <!-- Preview (hidden by default) -->
+  <div class="content" id="previewSection" style="display:none;">
+    <div class="preview-card">
+      <div class="preview-live-badge" id="previewBadge">LIVE</div>
+      <video id="previewVideo" autoplay muted playsinline></video>
+      <div class="preview-placeholder" id="previewPlaceholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <div>Start a managed stream to enable preview</div>
+      </div>
+      <button class="preview-btn" id="previewBtn" onclick="toggleManagedStream()">Start Preview</button>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="content">
+    <!-- Destinations -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Destinations</span>
+      </div>
+      <div class="platform-list" id="platformList"></div>
+      <div class="add-platform-bar" id="addBar"></div>
+    </div>
+
+    <!-- Settings panel (hidden by default) -->
+    <div class="section" id="settingsPanel" style="display:none;">
+      <div class="section-header">
+        <span class="section-title">Resolution</span>
+      </div>
+      <div class="resolution-row">
+        <button class="res-chip" data-res="720p" onclick="selectRes('720p')">
+          720p<div class="res-detail">1280x720</div>
+        </button>
+        <button class="res-chip" data-res="480p" onclick="selectRes('480p')">
+          480p<div class="res-detail">854x480</div>
+        </button>
+        <button class="res-chip" data-res="360p" onclick="selectRes('360p')">
+          360p<div class="res-detail">640x360</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Go Live -->
+  <div class="go-live-section">
+    <button class="btn-live start" id="liveBtn" onclick="goLive()" disabled>Go Live</button>
+    <div class="error-text" id="errorText"></div>
+  </div>
+
+  <script>
+    // --- State ---
+    const PLATFORMS = <%- JSON.stringify(platforms) %>;
+    let userPlatforms = <%- JSON.stringify(settings.platforms || []) %>;
+    let currentResolution = '<%= settings.resolution || "720p" %>';
+    let selectedPlatformIndex = -1;
+    let isLive = false;
+    let activeIndex = <%= activeIndex %>;
+    let polling = null;
+    let managedStreamActive = false;
+
+    // --- Init ---
+    renderPlatforms();
+    renderAddBar();
+    updateResChips();
+    if (activeIndex >= 0) {
+      isLive = true;
+      selectedPlatformIndex = activeIndex;
+      updateLiveButton();
+    }
+    startPolling();
+
+    // --- Platform rendering ---
+    function renderPlatforms() {
+      const list = document.getElementById('platformList');
+      list.innerHTML = '';
+      userPlatforms.forEach((p, i) => {
+        const plat = PLATFORMS[p.platformId] || PLATFORMS.custom;
+        const isActive = activeIndex === i;
+        const hasConfig = p.rtmpUrl && p.streamKey;
+        const card = document.createElement('div');
+        card.className = 'platform-card' + (selectedPlatformIndex === i ? ' selected' : '') + (isActive ? ' is-live' : '');
+        card.innerHTML = `
+          <div class="platform-header" onclick="togglePlatformConfig(${i})">
+            <div class="platform-icon ${p.platformId}">${plat.icon}</div>
+            <div class="platform-info">
+              <div class="platform-name">${plat.name}</div>
+              <div class="platform-status ${isActive ? 'live' : hasConfig ? 'configured' : ''}">${isActive ? 'LIVE' : hasConfig ? 'Ready' : 'Not configured'}</div>
+            </div>
+            <div class="platform-toggle ${selectedPlatformIndex === i ? 'checked' : ''}" onclick="event.stopPropagation(); selectPlatform(${i})"></div>
+          </div>
+          <div class="platform-config ${selectedPlatformIndex === i ? 'open' : ''}" id="config-${i}">
+            <div class="field">
+              <label>RTMP Server URL</label>
+              <input type="text" placeholder="${plat.defaultUrl || 'rtmp://...'}"
+                value="${p.rtmpUrl || ''}"
+                oninput="updatePlatformField(${i}, 'rtmpUrl', this.value)" />
+            </div>
+            <div class="field">
+              <label>Stream Key</label>
+              <input type="text" placeholder="xxxx-xxxx-xxxx-xxxx"
+                value="${p.streamKey || ''}"
+                oninput="updatePlatformField(${i}, 'streamKey', this.value)" />
+            </div>
+            <button class="remove-btn" onclick="removePlatform(${i})">Remove destination</button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+      updateLiveButton();
+    }
+
+    function renderAddBar() {
+      const bar = document.getElementById('addBar');
+      const used = new Set(userPlatforms.map(p => p.platformId));
+      bar.innerHTML = '';
+      Object.entries(PLATFORMS).forEach(([id, plat]) => {
+        // Allow multiple custom entries
+        if (used.has(id) && id !== 'custom') return;
+        const chip = document.createElement('button');
+        chip.className = 'add-chip';
+        chip.textContent = '+ ' + plat.name;
+        chip.onclick = () => addPlatform(id);
+        bar.appendChild(chip);
+      });
+    }
+
+    function addPlatform(platformId) {
+      const plat = PLATFORMS[platformId];
+      userPlatforms.push({
+        platformId,
+        rtmpUrl: plat.defaultUrl || '',
+        streamKey: '',
+        enabled: true,
+      });
+      selectedPlatformIndex = userPlatforms.length - 1;
+      renderPlatforms();
+      renderAddBar();
+      saveSettings();
+    }
+
+    function removePlatform(index) {
+      userPlatforms.splice(index, 1);
+      if (selectedPlatformIndex === index) selectedPlatformIndex = -1;
+      else if (selectedPlatformIndex > index) selectedPlatformIndex--;
+      renderPlatforms();
+      renderAddBar();
+      saveSettings();
+    }
+
+    function selectPlatform(index) {
+      selectedPlatformIndex = selectedPlatformIndex === index ? -1 : index;
+      renderPlatforms();
+    }
+
+    function togglePlatformConfig(index) {
+      const cfg = document.getElementById('config-' + index);
+      if (cfg) cfg.classList.toggle('open');
+    }
+
+    function updatePlatformField(index, field, value) {
+      userPlatforms[index][field] = value;
+      saveSettings();
+    }
+
+    // --- Resolution ---
+    function selectRes(res) {
+      currentResolution = res;
+      updateResChips();
+      saveSettings();
+    }
+
+    function updateResChips() {
+      document.querySelectorAll('.res-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.res === currentResolution);
+      });
+    }
+
+    // --- Settings panel toggle ---
+    function toggleSettings() {
+      const panel = document.getElementById('settingsPanel');
+      const btn = document.getElementById('settingsToggle');
+      const visible = panel.style.display !== 'none';
+      panel.style.display = visible ? 'none' : 'block';
+      btn.classList.toggle('active', !visible);
+    }
+
+    // --- Preview ---
+    function togglePreview() {
+      const section = document.getElementById('previewSection');
+      const btn = document.getElementById('previewToggle');
+      const visible = section.style.display !== 'none';
+      section.style.display = visible ? 'none' : 'block';
+      btn.classList.toggle('active', !visible);
+    }
+
+    async function toggleManagedStream() {
+      const btn = document.getElementById('previewBtn');
+      if (!managedStreamActive) {
+        btn.textContent = 'Starting...';
+        const result = await apiCall('/api/start-managed', 'POST');
+        if (result.success && result.urls) {
+          managedStreamActive = true;
+          btn.textContent = 'Stop Preview';
+          document.getElementById('previewBadge').classList.add('visible');
+          document.getElementById('previewPlaceholder').style.display = 'none';
+          // Try to play WebRTC or HLS
+          if (result.urls.webrtcUrl) {
+            loadWebRTCPreview(result.urls.webrtcUrl);
+          } else if (result.urls.hlsUrl) {
+            loadHLSPreview(result.urls.hlsUrl);
+          }
+        } else {
+          btn.textContent = 'Start Preview';
+        }
+      } else {
+        await apiCall('/api/stop-managed', 'POST');
+        managedStreamActive = false;
+        btn.textContent = 'Start Preview';
+        document.getElementById('previewBadge').classList.remove('visible');
+        document.getElementById('previewPlaceholder').style.display = '';
+        document.getElementById('previewVideo').src = '';
+      }
+    }
+
+    function loadHLSPreview(url) {
+      const video = document.getElementById('previewVideo');
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play();
+      }
+      // Could load hls.js here for non-Safari browsers
+    }
+
+    function loadWebRTCPreview(url) {
+      // WebRTC preview would need WHEP client — placeholder for now
+      const video = document.getElementById('previewVideo');
+      const placeholder = document.getElementById('previewPlaceholder');
+      placeholder.style.display = '';
+      placeholder.innerHTML = '<div>Preview stream active<br><small style="color:#888">WebRTC URL copied to clipboard</small></div>';
+      navigator.clipboard.writeText(url).catch(() => {});
+    }
+
+    // --- Go Live ---
+    function updateLiveButton() {
+      const btn = document.getElementById('liveBtn');
+      if (isLive) {
+        btn.className = 'btn-live stop';
+        btn.textContent = 'Stop Stream';
+        btn.disabled = false;
+      } else {
+        btn.className = 'btn-live start';
+        btn.textContent = 'Go Live';
+        const selected = userPlatforms[selectedPlatformIndex];
+        btn.disabled = !selected || !selected.rtmpUrl || !selected.streamKey;
+      }
+    }
+
+    async function goLive() {
+      const btn = document.getElementById('liveBtn');
+      document.getElementById('errorText').textContent = '';
+
+      if (isLive) {
+        btn.disabled = true;
+        btn.textContent = 'Stopping...';
+        const result = await apiCall('/api/stop', 'POST');
+        if (result.success) {
+          isLive = false;
+          activeIndex = -1;
+          renderPlatforms();
+        } else {
+          document.getElementById('errorText').textContent = result.error;
+          btn.disabled = false;
+          btn.textContent = 'Stop Stream';
+        }
+        return;
+      }
+
+      if (selectedPlatformIndex < 0) return;
+      await saveSettings();
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+
+      const result = await apiCall('/api/start', 'POST', { platformIndex: selectedPlatformIndex });
+      if (result.success) {
+        isLive = true;
+        activeIndex = selectedPlatformIndex;
+        renderPlatforms();
+      } else {
+        document.getElementById('errorText').textContent = result.error;
+        btn.disabled = false;
+        btn.textContent = 'Go Live';
+      }
+    }
+
+    // --- API ---
+    async function apiCall(endpoint, method, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      try {
+        const res = await fetch(endpoint, opts);
+        return await res.json();
+      } catch (e) {
+        return { error: e.message };
+      }
+    }
+
+    async function saveSettings() {
+      await apiCall('/api/settings', 'POST', {
+        resolution: currentResolution,
+        platforms: userPlatforms,
+      });
+    }
+
+    // --- Polling ---
+    function startPolling() {
+      if (polling) return;
+      polling = setInterval(async () => {
+        try {
+          const data = await apiCall('/api/status', 'GET');
+          if (data.streamStatus) updateStatus(data.streamStatus);
+          if (data.activeIndex !== undefined) {
+            const wasLive = isLive;
+            activeIndex = data.activeIndex;
+            isLive = activeIndex >= 0;
+            if (wasLive !== isLive) renderPlatforms();
+            updateLiveButton();
+          }
+        } catch (e) { /* ignore */ }
+      }, 3000);
+    }
+
+    function updateStatus(status) {
+      const dot = document.getElementById('statusDot');
+      const label = document.getElementById('statusLabel');
+      const s = status?.status || 'stopped';
+      dot.className = 'status-dot ' + s;
+      const labels = {
+        stopped: 'Ready',
+        initializing: 'Connecting...',
+        active: 'LIVE',
+        streaming: 'LIVE',
+        error: 'Error',
+        reconnecting: 'Reconnecting...',
+      };
+      label.textContent = labels[s] || s;
+      label.className = 'status-label' + (s === 'active' || s === 'streaming' ? ' live' : '');
+    }
+  </script>
+</body>
+</html>
