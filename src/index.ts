@@ -23,14 +23,15 @@ const RESOLUTION_PRESETS = {
 
 type ResolutionPreset = keyof typeof RESOLUTION_PRESETS;
 
-// Platform definitions with default RTMP URLs
-const PLATFORMS: Record<string, { name: string; icon: string; defaultUrl: string }> = {
-  x: { name: 'X (Twitter)', icon: '𝕏', defaultUrl: 'rtmp://va.pscp.tv:80/x/' },
-  youtube: { name: 'YouTube', icon: '▶', defaultUrl: 'rtmp://a.rtmp.youtube.com/live2/' },
-  twitch: { name: 'Twitch', icon: '⬡', defaultUrl: 'rtmp://live.twitch.tv/app/' },
-  instagram: { name: 'Instagram', icon: '◎', defaultUrl: 'rtmps://live-upload.instagram.com:443/rtmp/' },
-  kick: { name: 'Kick', icon: 'K', defaultUrl: 'rtmps://fa723fc1b171.global-contribute.live-video.net/app/' },
-  custom: { name: 'Custom', icon: '+', defaultUrl: '' },
+// Platform definitions with default RTMP URLs and logo images
+const PLATFORMS: Record<string, { name: string; icon: string; logo: string; defaultUrl: string }> = {
+  x: { name: 'X (Twitter)', icon: '𝕏', logo: 'https://abs.twimg.com/responsive-web/client-web/icon-ios.77d25eba.png', defaultUrl: 'rtmp://va.pscp.tv:80/x/' },
+  youtube: { name: 'YouTube', icon: '▶', logo: 'https://www.youtube.com/yts/img/favicon_96-vflW9Ec0w.png', defaultUrl: 'rtmp://a.rtmp.youtube.com/live2/' },
+  twitch: { name: 'Twitch', icon: '⬡', logo: 'https://www.google.com/s2/favicons?domain=twitch.tv&sz=128', defaultUrl: 'rtmp://live.twitch.tv/app/' },
+  instagram: { name: 'Instagram', icon: '◎', logo: 'https://www.instagram.com/static/images/ico/favicon-192.png/68d99ba29cc8.png', defaultUrl: 'rtmps://live-upload.instagram.com:443/rtmp/' },
+  kick: { name: 'Kick', icon: 'K', logo: 'https://www.google.com/s2/favicons?domain=kick.com&sz=128', defaultUrl: 'rtmps://fa723fc1b171.global-contribute.live-video.net/app/' },
+  restream: { name: 'Restream', icon: 'R', logo: 'https://restream.io/apple-touch-icon.png', defaultUrl: 'rtmp://live.restream.io/live/' },
+  custom: { name: 'Custom', icon: '+', logo: '', defaultUrl: '' },
 };
 
 interface PlatformConfig {
