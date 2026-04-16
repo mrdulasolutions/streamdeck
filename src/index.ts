@@ -123,10 +123,11 @@ class MentraStreamDeck extends AppServer {
     const state = this.activeUserStates.get(userId);
     if (!state) throw new Error('No active session');
 
+    state.streamStatus = 'initializing';
     state.session.layouts.showTextWall('Starting preview...');
     const urls = await state.session.camera.startManagedStream();
     state.streamUrls = urls;
-    state.streamStatus = 'initializing';
+    state.streamStatus = 'active';
     return urls;
   }
 

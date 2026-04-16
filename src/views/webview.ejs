@@ -758,8 +758,15 @@
         previewActive = true;
         updateLiveUI();
         requestWakeLock();
-        document.getElementById('previewText').textContent = 'Waiting for stream...';
-        startPreviewPoll();
+        if (result.urls?.hlsUrl) {
+          // HLS URL returned directly — connect after short delay for segments
+          document.getElementById('previewText').textContent = 'Connecting preview...';
+          setTimeout(() => connectHLS(result.urls.hlsUrl), 3000);
+        } else {
+          // Fall back to polling if URL not in response
+          document.getElementById('previewText').textContent = 'Waiting for stream...';
+          startPreviewPoll();
+        }
       } else {
         document.getElementById('previewText').textContent = result.error || 'Failed — tap to retry';
       }
@@ -790,12 +797,16 @@
       }, 1500);
     }
 
+    let hlsRetryCount = 0;
+    const HLS_MAX_RETRIES = 5;
+
     function connectHLS(hlsUrl) {
       const video = document.getElementById('previewVideo');
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = hlsUrl;
         video.play().catch(() => {});
         document.getElementById('previewOverlay').classList.add('hidden');
+        hlsRetryCount = 0;
         return;
       }
       if (typeof Hls !== 'undefined' && Hls.isSupported()) {
@@ -806,12 +817,22 @@
         hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
           video.play().catch(() => {});
           document.getElementById('previewOverlay').classList.add('hidden');
+          hlsRetryCount = 0;
         });
         hlsPlayer.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
-            document.getElementById('previewOverlay').classList.remove('hidden');
-            document.getElementById('previewText').textContent = 'Playback error — tap to retry';
-            previewActive = false; updateLiveUI();
+            hlsRetryCount++;
+            if (hlsRetryCount <= HLS_MAX_RETRIES && (previewActive || isLive)) {
+              console.log('HLS retry ' + hlsRetryCount + '/' + HLS_MAX_RETRIES);
+              document.getElementById('previewText').textContent = 'Connecting preview... (retry ' + hlsRetryCount + ')';
+              if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+              setTimeout(() => connectHLS(hlsUrl), 3000);
+            } else {
+              document.getElementById('previewOverlay').classList.remove('hidden');
+              document.getElementById('previewText').textContent = 'Playback error — tap to retry';
+              previewActive = false; updateLiveUI();
+              hlsRetryCount = 0;
+            }
           }
         });
         return;
