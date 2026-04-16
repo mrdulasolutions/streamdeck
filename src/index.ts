@@ -25,7 +25,7 @@ type ResolutionPreset = keyof typeof RESOLUTION_PRESETS;
 
 // Platform definitions with default RTMP URLs
 const PLATFORMS: Record<string, { name: string; icon: string; defaultUrl: string }> = {
-  x: { name: 'X (Twitter)', icon: '𝕏', defaultUrl: 'rtmp://live.x.com/app/' },
+  x: { name: 'X (Twitter)', icon: '𝕏', defaultUrl: 'rtmp://va.pscp.tv:80/x/' },
   youtube: { name: 'YouTube', icon: '▶', defaultUrl: 'rtmp://a.rtmp.youtube.com/live2/' },
   twitch: { name: 'Twitch', icon: '⬡', defaultUrl: 'rtmp://live.twitch.tv/app/' },
   instagram: { name: 'Instagram', icon: '◎', defaultUrl: 'rtmps://live-upload.instagram.com:443/rtmp/' },
@@ -37,16 +37,26 @@ interface PlatformConfig {
   platformId: string;
   rtmpUrl: string;
   streamKey: string;
+  streamTitle: string;
   enabled: boolean;
+}
+
+interface StreamUrls {
+  hlsUrl?: string;
+  dashUrl?: string;
+  webrtcUrl?: string;
+  streamId?: string;
+  previewUrl?: string;
 }
 
 interface UserStreamState {
   resolution: ResolutionPreset;
   platforms: PlatformConfig[];
-  streamStatus: RtmpStreamStatus;
+  streamStatus: string; // 'stopped' | 'initializing' | 'active' | 'error'
+  streamUrls: StreamUrls | null;
   managedStreamStatus: ManagedStreamStatus | null;
   session: TpaSession;
-  activeStreamIndex: number; // which platform is currently streaming (-1 = none)
+  activePlatformIndices: number[]; // which platforms are being streamed to
 }
 
 interface UserPersistentSettings {
@@ -69,14 +79,6 @@ class MentraStreamDeck extends AppServer {
       publicDir: path.join(__dirname, '../public'),
     });
     setupExpressRoutes(this);
-  }
-
-  private stoppedStatus(): RtmpStreamStatus {
-    return {
-      type: GlassesToCloudMessageType.RTMP_STREAM_STATUS,
-      status: 'stopped',
-      timestamp: new Date(),
-    };
   }
 
   // --- Public API for webview routes ---
@@ -105,39 +107,62 @@ class MentraStreamDeck extends AppServer {
     };
   }
 
-  public getStreamStatusForUser(userId: string): RtmpStreamStatus {
-    return this.activeUserStates.get(userId)?.streamStatus || this.stoppedStatus();
+  public getStreamStateForUser(userId: string) {
+    const state = this.activeUserStates.get(userId);
+    return {
+      status: state?.streamStatus || 'stopped',
+      urls: state?.streamUrls || null,
+      managedStatus: state?.managedStreamStatus || null,
+      activePlatformIndices: state?.activePlatformIndices || [],
+    };
   }
 
-  public getManagedStreamStatusForUser(userId: string): ManagedStreamStatus | null {
-    return this.activeUserStates.get(userId)?.managedStreamStatus || null;
+  // Start preview only (managed stream, no restream destinations)
+  public async startPreviewForUser(userId: string): Promise<StreamUrls> {
+    const state = this.activeUserStates.get(userId);
+    if (!state) throw new Error('No active session');
+
+    state.session.layouts.showTextWall('Starting preview...');
+    const urls = await state.session.camera.startManagedStream();
+    state.streamUrls = urls;
+    state.streamStatus = 'initializing';
+    return urls;
   }
 
-  public getActiveStreamIndexForUser(userId: string): number {
-    return this.activeUserStates.get(userId)?.activeStreamIndex ?? -1;
-  }
-
-  public async startStreamForUser(userId: string, platformIndex: number): Promise<void> {
+  // Go live: managed stream WITH restream destinations (preview + RTMP simultaneously)
+  public async goLiveForUser(userId: string, platformIndices: number[]): Promise<StreamUrls> {
     const state = this.activeUserStates.get(userId);
     if (!state) throw new Error('No active session');
 
     const settings = this.getSettingsForUser(userId);
-    const platform = settings.platforms[platformIndex];
-    if (!platform) throw new Error('Platform not found');
-    if (!platform.rtmpUrl || !platform.streamKey) throw new Error('RTMP URL and stream key required');
-
-    const fullUrl = platform.rtmpUrl.endsWith('/')
-      ? platform.rtmpUrl + platform.streamKey
-      : platform.rtmpUrl + '/' + platform.streamKey;
-
     const preset = RESOLUTION_PRESETS[settings.resolution];
-    const platformName = PLATFORMS[platform.platformId]?.name || 'Custom';
 
-    state.session.layouts.showTextWall(`Starting ${settings.resolution} stream to ${platformName}...`);
-    state.activeStreamIndex = platformIndex;
+    // Build restream destinations from selected platforms
+    const restreamDestinations = platformIndices.map(i => {
+      const p = settings.platforms[i];
+      if (!p || !p.rtmpUrl || !p.streamKey) throw new Error(`Platform ${i} not configured`);
+      const plat = PLATFORMS[p.platformId] || PLATFORMS.custom;
+      const fullUrl = p.rtmpUrl.endsWith('/')
+        ? p.rtmpUrl + p.streamKey
+        : p.rtmpUrl + '/' + p.streamKey;
+      return { url: fullUrl, name: plat.name };
+    });
 
-    await state.session.camera.startStream({
-      rtmpUrl: fullUrl,
+    if (restreamDestinations.length === 0) throw new Error('No destinations selected');
+
+    console.log(`[GoLive] ${restreamDestinations.length} destination(s):`, JSON.stringify(restreamDestinations));
+    const names = restreamDestinations.map(d => d.name).join(', ');
+    state.session.layouts.showTextWall(`Going live to ${names}...`);
+    state.activePlatformIndices = platformIndices;
+    state.streamStatus = 'initializing';
+
+    // Stop existing managed stream first if running (preview)
+    try { await state.session.camera.stopManagedStream(); } catch (e) { /* ignore */ }
+
+    // Start managed stream with restream destinations
+    // This gives us HLS preview URL AND forwards to all RTMP destinations
+    const urls = await state.session.camera.startManagedStream({
+      restreamDestinations,
       video: {
         width: preset.width,
         height: preset.height,
@@ -151,41 +176,21 @@ class MentraStreamDeck extends AppServer {
         noiseSuppression: true,
       },
     });
+
+    state.streamUrls = urls;
+    return urls;
   }
 
+  // Stop everything (preview or live)
   public async stopStreamForUser(userId: string): Promise<void> {
     const state = this.activeUserStates.get(userId);
     if (!state) throw new Error('No active session');
 
     state.session.layouts.showTextWall('Stopping stream...');
-    state.activeStreamIndex = -1;
-    await state.session.camera.stopStream();
-  }
-
-  public async startManagedStreamForUser(userId: string): Promise<any> {
-    const state = this.activeUserStates.get(userId);
-    if (!state) throw new Error('No active session');
-
-    state.session.layouts.showTextWall('Starting managed stream...');
-    const urls = await state.session.camera.startManagedStream();
-    state.managedStreamStatus = {
-      type: CloudToAppMessageType.MANAGED_STREAM_STATUS,
-      status: 'initializing',
-      hlsUrl: urls.hlsUrl,
-      dashUrl: urls.dashUrl,
-      webrtcUrl: urls.webrtcUrl,
-      streamId: urls.streamId,
-      timestamp: new Date(),
-    };
-    return urls;
-  }
-
-  public async stopManagedStreamForUser(userId: string): Promise<void> {
-    const state = this.activeUserStates.get(userId);
-    if (!state) throw new Error('No active session');
-
-    state.session.layouts.showTextWall('Stopping managed stream...');
-    await state.session.camera.stopManagedStream();
+    try { await state.session.camera.stopManagedStream(); } catch (e) { /* ignore */ }
+    state.streamStatus = 'stopped';
+    state.streamUrls = null;
+    state.activePlatformIndices = [];
   }
 
   // --- Session lifecycle ---
@@ -197,46 +202,41 @@ class MentraStreamDeck extends AppServer {
     const state: UserStreamState = {
       resolution: settings.resolution,
       platforms: settings.platforms,
-      streamStatus: this.stoppedStatus(),
+      streamStatus: 'stopped',
+      streamUrls: null,
       managedStreamStatus: null,
       session,
-      activeStreamIndex: -1,
+      activePlatformIndices: [],
     };
     this.activeUserStates.set(userId, state);
 
-    session.layouts.showTextWall('StreamDeck ready. Open the webview to configure.');
+    session.layouts.showTextWall('StreamDeck ready.');
 
     const cleanup = [
-      session.camera.onStreamStatus((status: RtmpStreamStatus) => {
-        console.log(`Stream status [${userId}]: ${status.status}`);
+      session.camera.onManagedStreamStatus((status: ManagedStreamStatus) => {
+        console.log(`Stream status [${userId}]: ${status.status}`, (status as any).outputs ? `| Outputs: ${JSON.stringify((status as any).outputs)}` : '');
         const s = this.activeUserStates.get(userId);
         if (s) {
-          s.streamStatus = { ...status, timestamp: new Date() };
+          s.managedStreamStatus = { ...status, timestamp: new Date() };
+          s.streamStatus = status.status;
+          if (status.hlsUrl) s.streamUrls = { ...s.streamUrls, hlsUrl: status.hlsUrl };
+          if (status.dashUrl) s.streamUrls = { ...s.streamUrls, dashUrl: status.dashUrl };
+          if (status.webrtcUrl) s.streamUrls = { ...s.streamUrls, webrtcUrl: status.webrtcUrl };
+
           switch (status.status) {
-            case 'initializing':
-              session.layouts.showTextWall('Stream initializing...');
-              break;
             case 'active':
               session.layouts.showTextWall('LIVE');
               break;
             case 'error':
-              session.layouts.showTextWall(`Stream error: ${status.errorDetails}`);
-              s.activeStreamIndex = -1;
+              session.layouts.showTextWall(`Error: ${(status as any).message || 'unknown'}`);
+              s.activePlatformIndices = [];
               break;
             case 'stopped':
               session.layouts.showTextWall('Stream stopped');
-              s.activeStreamIndex = -1;
+              s.activePlatformIndices = [];
+              s.streamUrls = null;
               break;
           }
-        }
-      }),
-
-      session.camera.onManagedStreamStatus((status: ManagedStreamStatus) => {
-        console.log(`Managed stream status [${userId}]: ${status.status}`);
-        const s = this.activeUserStates.get(userId);
-        if (s) {
-          s.managedStreamStatus = { ...status, timestamp: new Date() };
-          if (status.status === 'stopped') s.managedStreamStatus = null;
         }
       }),
 
@@ -262,4 +262,4 @@ const app = new MentraStreamDeck();
 app.start().catch(console.error);
 
 export { MentraStreamDeck };
-export type { ResolutionPreset, PlatformConfig, UserPersistentSettings };
+export type { ResolutionPreset, PlatformConfig, UserPersistentSettings, StreamUrls };

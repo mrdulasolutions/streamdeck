@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>StreamDeck</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,473 +11,629 @@
       background: #f5f5f7;
       color: #1d1d1f;
       min-height: 100vh;
+      padding-bottom: calc(80px + env(safe-area-inset-bottom, 20px));
     }
 
-    /* === TOOLBAR === */
-    .toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      background: #fff;
-      border-bottom: 1px solid #e5e5e7;
-      position: sticky;
-      top: 0;
-      z-index: 100;
+    /* === HEADER === */
+    .header { padding: 16px 16px 0; background: #fff; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .header-title { font-size: 22px; font-weight: 700; }
+    .header-subtitle { font-size: 12px; color: #86868b; font-weight: 400; }
+    .live-indicator {
+      display: none; align-items: center; gap: 6px;
+      padding: 5px 10px; background: #ff453a; border-radius: 6px;
+      color: #fff; font-size: 12px; font-weight: 700;
     }
-    .toolbar-left { display: flex; align-items: center; gap: 10px; }
-    .toolbar-title { font-size: 17px; font-weight: 600; }
-    .toolbar-right { display: flex; align-items: center; gap: 8px; }
-    .toolbar-btn {
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      border: none;
-      background: #f5f5f7;
-      color: #1d1d1f;
-      font-size: 15px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s;
-    }
-    .toolbar-btn:hover { background: #e8e8ed; }
-    .toolbar-btn.active { background: #007aff; color: #fff; }
-
-    /* === STATUS BAR === */
-    .status-strip {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background: #fff;
-      border-bottom: 1px solid #e5e5e7;
-    }
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .status-dot.stopped { background: #86868b; }
-    .status-dot.initializing { background: #ff9f0a; animation: pulse 1s infinite; }
-    .status-dot.active { background: #30d158; animation: pulse 1.5s infinite; }
-    .status-dot.streaming { background: #30d158; animation: pulse 1.5s infinite; }
-    .status-dot.error { background: #ff453a; }
-    .status-dot.reconnecting { background: #ff9f0a; animation: pulse 0.5s infinite; }
-    .status-label { font-size: 13px; color: #86868b; flex: 1; }
-    .status-label.live { color: #30d158; font-weight: 600; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-    /* === CONTENT === */
-    .content { padding: 16px; }
+    .live-indicator.visible { display: flex; }
+    .live-indicator .dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; }
 
     /* === PREVIEW === */
-    .preview-card {
-      background: #000;
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 16px;
-      aspect-ratio: 16/9;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .preview-wrap { background: #fff; padding-bottom: 12px; }
+    .preview-container {
+      margin: 0 16px; background: #000; border-radius: 12px;
+      overflow: hidden; aspect-ratio: 16/9; position: relative;
+      cursor: pointer;
     }
-    .preview-card video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+    .preview-container video { width: 100%; height: 100%; object-fit: contain; }
+    .preview-overlay {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; color: #666;
+      font-size: 13px; gap: 6px;
     }
-    .preview-placeholder {
-      color: #555;
-      font-size: 14px;
-      text-align: center;
+    .preview-overlay svg { width: 32px; height: 32px; opacity: 0.3; }
+    .preview-overlay.hidden { display: none; }
+    .preview-badge {
+      position: absolute; top: 8px; left: 8px;
+      background: #007aff; color: #fff; font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 4px; display: none;
     }
-    .preview-placeholder svg { width: 40px; height: 40px; margin-bottom: 8px; opacity: 0.3; }
-    .preview-live-badge {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: #ff453a;
-      color: #fff;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 4px;
+    .preview-badge.preview-mode { background: #007aff; }
+    .preview-badge.live-mode { background: #ff453a; }
+    .preview-badge.visible { display: block; }
+    .preview-time {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; font-weight: 500;
+      padding: 2px 7px; border-radius: 4px; font-variant-numeric: tabular-nums;
       display: none;
     }
-    .preview-live-badge.visible { display: block; }
-    .preview-btn {
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: none;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      background: rgba(255,255,255,0.15);
-      color: #fff;
-      backdrop-filter: blur(8px);
-    }
-    .preview-btn:hover { background: rgba(255,255,255,0.25); }
+    .preview-time.visible { display: block; }
 
-    /* === SECTION === */
-    .section { margin-bottom: 20px; }
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .section-title { font-size: 13px; font-weight: 600; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; }
-
-    /* === PLATFORM CARDS === */
-    .platform-list { display: flex; flex-direction: column; gap: 8px; }
-    .platform-card {
-      background: #fff;
-      border-radius: 12px;
-      border: 1px solid #e5e5e7;
-      overflow: hidden;
-      transition: border-color 0.15s;
-    }
-    .platform-card.selected { border-color: #007aff; }
-    .platform-card.is-live { border-color: #30d158; }
-
-    .platform-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      cursor: pointer;
-    }
-    .platform-icon {
-      width: 36px; height: 36px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-    .platform-icon.x { background: #000; color: #fff; }
-    .platform-icon.youtube { background: #ff0000; color: #fff; }
-    .platform-icon.twitch { background: #9146ff; color: #fff; }
-    .platform-icon.instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; }
-    .platform-icon.kick { background: #53fc18; color: #000; }
-    .platform-icon.custom { background: #e5e5e7; color: #86868b; }
-
-    .platform-info { flex: 1; min-width: 0; }
-    .platform-name { font-size: 15px; font-weight: 500; }
-    .platform-status { font-size: 12px; color: #86868b; }
-    .platform-status.configured { color: #30d158; }
-    .platform-status.live { color: #30d158; font-weight: 600; }
-
-    .platform-toggle {
-      position: relative;
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      border: 2px solid #d1d1d6;
-      background: #fff;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-    .platform-toggle.checked {
-      border-color: #007aff;
-      background: #007aff;
-    }
-    .platform-toggle.checked::after {
-      content: '';
-      position: absolute;
-      top: 3px; left: 6px;
-      width: 5px; height: 9px;
-      border: solid #fff;
-      border-width: 0 2px 2px 0;
-      transform: rotate(45deg);
-    }
-
-    .platform-config {
-      padding: 0 14px 14px 14px;
+    /* === HELP CARD === */
+    .help-card {
+      margin: 0 16px 12px; padding: 10px 14px;
+      background: #eef4ff; border-radius: 10px; border: 1px solid #d0e0ff;
       display: none;
     }
-    .platform-config.open { display: block; }
-
-    .field { margin-bottom: 10px; }
-    .field label { display: block; font-size: 12px; color: #86868b; margin-bottom: 4px; font-weight: 500; }
-    .field input {
-      width: 100%;
-      padding: 10px 12px;
-      background: #f5f5f7;
-      border: 1px solid #e5e5e7;
-      border-radius: 8px;
-      font-size: 14px;
-      color: #1d1d1f;
-      outline: none;
-      font-family: 'SF Mono', 'Fira Code', monospace;
+    .help-card.visible { display: flex; }
+    .help-card-icon { font-size: 16px; margin-right: 10px; flex-shrink: 0; margin-top: 1px; }
+    .help-card-text { font-size: 12px; color: #3a6bc5; line-height: 1.5; }
+    .help-card-dismiss {
+      margin-left: auto; background: none; border: none;
+      color: #3a6bc5; font-size: 16px; cursor: pointer; padding: 0 4px; flex-shrink: 0;
     }
-    .field input:focus { border-color: #007aff; background: #fff; }
-    .field input::placeholder { color: #c7c7cc; }
 
-    .field-row { display: flex; gap: 8px; }
-    .field-row .field { flex: 1; }
-
-    /* === ADD PLATFORM === */
-    .add-platform-bar {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      padding: 10px 0;
+    /* === STATS === */
+    .stats-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px; padding: 0 16px 12px;
     }
-    .add-chip {
-      padding: 6px 12px;
-      border-radius: 16px;
-      border: 1px dashed #d1d1d6;
-      background: #fff;
-      font-size: 13px;
-      color: #86868b;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .add-chip:hover { border-color: #007aff; color: #007aff; }
-
-    /* === RESOLUTION === */
-    .resolution-row { display: flex; gap: 6px; }
-    .res-chip {
-      flex: 1;
-      padding: 8px;
-      text-align: center;
-      border-radius: 8px;
-      border: 1px solid #e5e5e7;
-      background: #fff;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .res-chip:hover { border-color: #007aff; }
-    .res-chip.active { border-color: #007aff; background: #eef4ff; color: #007aff; }
-    .res-chip .res-detail { font-size: 11px; color: #86868b; font-weight: 400; }
-    .res-chip.active .res-detail { color: #007aff; }
+    .stat-card { background: #fff; border-radius: 10px; padding: 10px 12px; text-align: center; }
+    .stat-value { font-size: 18px; font-weight: 700; color: #1d1d1f; }
+    .stat-value.live { color: #30d158; }
+    .stat-value.error { color: #ff453a; }
+    .stat-label { font-size: 10px; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 
     /* === GO LIVE BUTTON === */
-    .go-live-section { padding: 0 16px 24px; }
+    .live-section { padding: 0 16px 12px; }
     .btn-live {
-      width: 100%;
-      padding: 16px;
-      border: none;
-      border-radius: 12px;
-      font-size: 17px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
+      width: 100%; padding: 15px; border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.15s;
     }
-    .btn-live:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-live:disabled { opacity: 0.35; cursor: not-allowed; }
     .btn-live.start { background: #30d158; color: #fff; }
     .btn-live.start:hover:not(:disabled) { background: #28b84c; }
     .btn-live.stop { background: #ff453a; color: #fff; }
     .btn-live.stop:hover:not(:disabled) { background: #e03e34; }
+    .error-text { color: #ff453a; font-size: 12px; margin-top: 6px; text-align: center; }
 
-    .error-text { color: #ff453a; font-size: 13px; margin-top: 8px; text-align: center; }
-
-    /* === REMOVE BTN === */
-    .remove-btn {
-      padding: 6px 10px;
-      border: none;
-      background: none;
-      color: #ff453a;
-      font-size: 12px;
+    /* === DEST SUMMARY (home page) === */
+    .dest-summary { padding: 0 16px 12px; }
+    .dest-summary-title { font-size: 12px; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+    .dest-chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .dest-chip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; background: #fff; border-radius: 8px;
+      font-size: 13px; font-weight: 500; border: 1px solid #e5e5e7;
       cursor: pointer;
-      border-radius: 6px;
+    }
+    .dest-chip.selected { border-color: #007aff; background: #eef4ff; }
+    .dest-chip.live { border-color: #30d158; background: #f0faf2; }
+    .dest-chip .chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dest-chip .chip-dot.ready { background: #86868b; }
+    .dest-chip .chip-dot.selected { background: #007aff; }
+    .dest-chip .chip-dot.live { background: #30d158; }
+
+    /* === PAGES === */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* === SETTINGS PAGE === */
+    .settings-page { padding: 16px; }
+    .settings-group { margin-bottom: 20px; }
+    .settings-group-title { font-size: 12px; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; padding-left: 4px; }
+    .settings-card { background: #fff; border-radius: 12px; overflow: hidden; }
+    .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid #f0f0f2; }
+    .settings-row:last-child { border-bottom: none; }
+    .settings-row-label { font-size: 15px; }
+    .settings-row-value { font-size: 15px; color: #007aff; font-weight: 500; }
+    .resolution-row { display: flex; gap: 6px; padding: 4px; }
+    .res-chip {
+      flex: 1; padding: 10px; text-align: center; border-radius: 8px;
+      border: 1px solid #e5e5e7; background: #fff; font-size: 14px;
+      font-weight: 500; cursor: pointer; transition: all 0.15s;
+    }
+    .res-chip:hover { border-color: #007aff; }
+    .res-chip.active { border-color: #007aff; background: #eef4ff; color: #007aff; }
+    .res-chip .res-detail { font-size: 10px; color: #86868b; font-weight: 400; margin-top: 1px; }
+    .res-chip.active .res-detail { color: #007aff; }
+
+    /* === DESTINATIONS PAGE — CARD STACK === */
+    .destinations-page { padding: 16px; }
+    .dest-card-stack { display: flex; flex-direction: column; gap: 12px; }
+    .dest-card {
+      background: #fff; border-radius: 16px; overflow: hidden;
+      border: 1.5px solid #e5e5e7; transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .dest-card.selected { border-color: #007aff; box-shadow: 0 0 0 1px #007aff, 0 2px 8px rgba(0,122,255,0.12); }
+    .dest-card.is-live { border-color: #30d158; box-shadow: 0 0 0 1px #30d158, 0 2px 8px rgba(48,209,88,0.12); }
+    .dest-card-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; cursor: pointer;
+    }
+    .dest-card-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; flex-shrink: 0;
+    }
+    .dest-card-icon.x { background: #000; color: #fff; }
+    .dest-card-icon.youtube { background: #ff0000; color: #fff; }
+    .dest-card-icon.twitch { background: #9146ff; color: #fff; }
+    .dest-card-icon.instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; }
+    .dest-card-icon.kick { background: #53fc18; color: #000; }
+    .dest-card-icon.custom { background: #e5e5e7; color: #86868b; }
+    .dest-card-info { flex: 1; min-width: 0; }
+    .dest-card-name { font-size: 16px; font-weight: 600; }
+    .dest-card-status { font-size: 12px; color: #86868b; margin-top: 1px; }
+    .dest-card-status.configured { color: #30d158; }
+    .dest-card-status.live { color: #30d158; font-weight: 600; }
+    .dest-card-toggle {
+      width: 22px; height: 22px; border-radius: 50%; border: 2px solid #d1d1d6;
+      background: #fff; flex-shrink: 0; cursor: pointer; position: relative;
+      transition: all 0.15s;
+    }
+    .dest-card-toggle.checked { border-color: #007aff; background: #007aff; }
+    .dest-card-toggle.checked::after {
+      content: ''; position: absolute; top: 3px; left: 6px;
+      width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .dest-card-expand {
+      width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+      color: #c7c7cc; transition: transform 0.2s; flex-shrink: 0;
+    }
+    .dest-card-expand.open { transform: rotate(180deg); }
+    .dest-card-body {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+    }
+    .dest-card-body.open { max-height: 500px; }
+    .dest-card-fields {
+      padding: 0 16px 16px; border-top: 1px solid #f0f0f2;
+    }
+    .field { margin-top: 12px; }
+    .field label { display: block; font-size: 12px; color: #86868b; margin-bottom: 4px; font-weight: 500; }
+    .field input {
+      width: 100%; padding: 10px 12px; background: #f5f5f7;
+      border: 1px solid #e5e5e7; border-radius: 8px;
+      font-size: 14px; color: #1d1d1f; outline: none;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .field input.title-input {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    }
+    .field input:focus { border-color: #007aff; background: #fff; }
+    .field input::placeholder { color: #c7c7cc; }
+    .field-hint {
+      font-size: 11px; color: #86868b; margin-top: 4px; line-height: 1.4;
+    }
+    .field-hint a { color: #007aff; text-decoration: none; }
+    .dest-card-footer {
+      padding: 0 16px 12px;
+      display: flex; justify-content: flex-end;
+    }
+    .remove-btn {
+      padding: 6px 12px; border: none; background: none;
+      color: #ff453a; font-size: 13px; cursor: pointer; border-radius: 6px;
+      font-weight: 500;
     }
     .remove-btn:hover { background: #fff0f0; }
+
+    /* Platform warning banner */
+    .dest-card-warning {
+      margin: 0 16px 12px; padding: 10px 12px;
+      background: #fff8e6; border-radius: 8px; border: 1px solid #f0dfa0;
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .dest-card-warning-icon { font-size: 14px; flex-shrink: 0; line-height: 1.4; }
+    .dest-card-warning-text { font-size: 12px; color: #8a6d00; line-height: 1.5; }
+    .dest-card-warning-text a { color: #007aff; text-decoration: none; font-weight: 500; }
+    .dest-card-warning-text strong { font-weight: 600; color: #6b5400; }
+
+    /* Add destination buttons */
+    .add-platform-section { margin-top: 16px; }
+    .add-platform-title { font-size: 12px; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+    .add-platform-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .add-platform-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 14px 8px; background: #fff; border-radius: 12px;
+      border: 1.5px dashed #d1d1d6; cursor: pointer; transition: all 0.15s;
+    }
+    .add-platform-btn:hover { border-color: #007aff; }
+    .add-platform-btn .add-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+    }
+    .add-platform-btn .add-label { font-size: 12px; color: #86868b; font-weight: 500; }
+
+    /* === BOTTOM NAV === */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      display: flex; background: #fff; border-top: 1px solid #e5e5e7;
+      padding: 8px 0 calc(12px + env(safe-area-inset-bottom, 16px));
+      z-index: 200;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 3px; padding: 6px 0; background: none; border: none;
+      cursor: pointer; color: #86868b; font-size: 10px; font-weight: 500;
+      transition: color 0.15s;
+    }
+    .nav-item.active { color: #007aff; }
+    .nav-item svg { width: 22px; height: 22px; }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   </style>
 </head>
 <body>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="toolbar-left">
-      <span class="toolbar-title">StreamDeck</span>
-    </div>
-    <div class="toolbar-right">
-      <button class="toolbar-btn" id="previewToggle" onclick="togglePreview()" title="Preview">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
-      <button class="toolbar-btn" id="settingsToggle" onclick="toggleSettings()" title="Settings">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- Status strip -->
-  <div class="status-strip">
-    <div class="status-dot stopped" id="statusDot"></div>
-    <span class="status-label" id="statusLabel">Ready</span>
-  </div>
-
-  <!-- Preview (hidden by default) -->
-  <div class="content" id="previewSection" style="display:none;">
-    <div class="preview-card">
-      <div class="preview-live-badge" id="previewBadge">LIVE</div>
-      <video id="previewVideo" autoplay muted playsinline></video>
-      <div class="preview-placeholder" id="previewPlaceholder">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        <div>Start a managed stream to enable preview</div>
-      </div>
-      <button class="preview-btn" id="previewBtn" onclick="toggleManagedStream()">Start Preview</button>
-    </div>
-  </div>
-
-  <!-- Main content -->
-  <div class="content">
-    <!-- Destinations -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">Destinations</span>
-      </div>
-      <div class="platform-list" id="platformList"></div>
-      <div class="add-platform-bar" id="addBar"></div>
-    </div>
-
-    <!-- Settings panel (hidden by default) -->
-    <div class="section" id="settingsPanel" style="display:none;">
-      <div class="section-header">
-        <span class="section-title">Resolution</span>
-      </div>
-      <div class="resolution-row">
-        <button class="res-chip" data-res="720p" onclick="selectRes('720p')">
-          720p<div class="res-detail">1280x720</div>
-        </button>
-        <button class="res-chip" data-res="480p" onclick="selectRes('480p')">
-          480p<div class="res-detail">854x480</div>
-        </button>
-        <button class="res-chip" data-res="360p" onclick="selectRes('360p')">
-          360p<div class="res-detail">640x360</div>
-        </button>
+  <!-- ==================== HOME PAGE ==================== -->
+  <div class="page active" id="page-home">
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <div class="header-title">StreamDeck</div>
+          <div class="header-subtitle">Live stream with Mentra in true 16:9</div>
+        </div>
+        <div class="live-indicator" id="liveIndicator">
+          <span class="dot"></span> LIVE
+        </div>
       </div>
     </div>
+
+    <!-- Preview -->
+    <div class="preview-wrap">
+      <div class="preview-container" id="previewContainer" onclick="handlePreviewTap()">
+        <video id="previewVideo" autoplay muted playsinline></video>
+        <div class="preview-overlay" id="previewOverlay">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span id="previewText">Tap to start preview</span>
+        </div>
+        <div class="preview-badge" id="previewBadge">LIVE PREVIEW</div>
+        <div class="preview-time" id="previewTime">00:00</div>
+      </div>
+    </div>
+
+    <!-- Help card -->
+    <div class="help-card visible" id="helpCard">
+      <span class="help-card-icon">&#9432;</span>
+      <div class="help-card-text">
+        <strong>Preview stays on while live.</strong> Your stream goes through Mentra Cloud, which provides a preview feed and forwards to your RTMP destinations simultaneously. Preview has a few seconds of delay — your actual stream is real-time.
+      </div>
+      <button class="help-card-dismiss" onclick="dismissHelp()">&#10005;</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="statStatus">Idle</div>
+        <div class="stat-label">Status</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statResolution"><%= settings.resolution || '720p' %></div>
+        <div class="stat-label">Resolution</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statFps">30</div>
+        <div class="stat-label">FPS</div>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="statBitrate">--</div>
+        <div class="stat-label">Bitrate</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statUptime">--</div>
+        <div class="stat-label">Uptime</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statHealth">--</div>
+        <div class="stat-label">Health</div>
+      </div>
+    </div>
+
+    <!-- Destination summary -->
+    <div class="dest-summary" id="destSummary"></div>
+
+    <!-- Go Live -->
+    <div class="live-section">
+      <button class="btn-live start" id="liveBtn" onclick="goLive()" disabled>Go Live</button>
+      <div class="error-text" id="errorText"></div>
+    </div>
   </div>
 
-  <!-- Go Live -->
-  <div class="go-live-section">
-    <button class="btn-live start" id="liveBtn" onclick="goLive()" disabled>Go Live</button>
-    <div class="error-text" id="errorText"></div>
+  <!-- ==================== SETTINGS PAGE ==================== -->
+  <div class="page" id="page-settings">
+    <div class="header"><div class="header-top"><div class="header-title">Settings</div></div></div>
+    <div class="settings-page">
+      <div class="settings-group">
+        <div class="settings-group-title">Resolution</div>
+        <div class="settings-card">
+          <div style="padding: 8px;">
+            <div class="resolution-row">
+              <button class="res-chip" data-res="720p" onclick="selectRes('720p')">720p<div class="res-detail">1280x720</div></button>
+              <button class="res-chip" data-res="480p" onclick="selectRes('480p')">480p<div class="res-detail">854x480</div></button>
+              <button class="res-chip" data-res="360p" onclick="selectRes('360p')">360p<div class="res-detail">640x360</div></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-group-title">Stream</div>
+        <div class="settings-card">
+          <div class="settings-row"><span class="settings-row-label">Codec</span><span class="settings-row-value">H.264</span></div>
+          <div class="settings-row"><span class="settings-row-label">Audio</span><span class="settings-row-value">AAC 128k</span></div>
+          <div class="settings-row"><span class="settings-row-label">Aspect Ratio</span><span class="settings-row-value">16:9</span></div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-group-title">About</div>
+        <div class="settings-card">
+          <div class="settings-row"><span class="settings-row-label">App</span><span class="settings-row-value">StreamDeck v1.0</span></div>
+          <div class="settings-row"><span class="settings-row-label">SDK</span><span class="settings-row-value">MentraOS</span></div>
+          <div class="settings-row"><span class="settings-row-label">License</span><span class="settings-row-value">MIT</span></div>
+        </div>
+      </div>
+    </div>
   </div>
 
+  <!-- ==================== DESTINATIONS PAGE ==================== -->
+  <div class="page" id="page-destinations">
+    <div class="header"><div class="header-top"><div class="header-title">Destinations</div></div></div>
+    <div class="destinations-page">
+      <div class="dest-card-stack" id="destCardStack"></div>
+      <div class="add-platform-section" id="addSection"></div>
+    </div>
+  </div>
+
+  <!-- ==================== BOTTOM NAV ==================== -->
+  <div class="bottom-nav">
+    <button class="nav-item active" data-page="home" onclick="switchPage('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </button>
+    <button class="nav-item" data-page="settings" onclick="switchPage('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </button>
+    <button class="nav-item" data-page="destinations" onclick="switchPage('destinations')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Destinations
+    </button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
   <script>
     // --- State ---
     const PLATFORMS = <%- JSON.stringify(platforms) %>;
+    const PLATFORM_INFO = {
+      x: {
+        directPush: false,
+        titleHint: 'Set your stream title in <a href="https://studio.x.com" target="_blank">X Media Studio</a> before going live.',
+        warning: '<strong>X does not support direct RTMP push.</strong> You must either create a broadcast in <a href="https://studio.x.com" target="_blank">Media Studio</a> first (requires X Premium), or route through <a href="https://restream.io" target="_blank">Restream</a> which handles this automatically. X has no public API for broadcast creation.',
+      },
+      youtube: {
+        directPush: true,
+        titleHint: 'Title will appear on your YouTube Live broadcast.',
+        warning: null,
+      },
+      twitch: {
+        directPush: true,
+        titleHint: 'Title will appear on your Twitch channel.',
+        warning: null,
+      },
+      instagram: {
+        directPush: false,
+        titleHint: 'Set your title in the Instagram app before going live.',
+        warning: '<strong>Instagram does not support direct RTMP push.</strong> You must start a Live in the Instagram app first to get your stream key, or route through <a href="https://restream.io" target="_blank">Restream</a>. Instagram has no public API for live creation.',
+      },
+      kick: {
+        directPush: true,
+        titleHint: 'Title will appear on your Kick stream.',
+        warning: null,
+      },
+      custom: {
+        directPush: true,
+        titleHint: 'Set your title on the destination platform if needed.',
+        warning: null,
+      },
+    };
     let userPlatforms = <%- JSON.stringify(settings.platforms || []) %>;
     let currentResolution = '<%= settings.resolution || "720p" %>';
-    let selectedPlatformIndex = -1;
+    let selectedPlatformIndices = new Set();
+    let openCardIndices = new Set();
     let isLive = false;
-    let activeIndex = <%= activeIndex %>;
-    let polling = null;
-    let managedStreamActive = false;
+    let activePlatformIndices = [];
+    let streamStartTime = null;
+    let uptimeInterval = null;
+    let previewActive = false;
+    let previewLoading = false;
+    let hlsPlayer = null;
+    let previewPollId = null;
+    let helpDismissed = localStorage.getItem('helpDismissed') === '1';
 
     // --- Init ---
-    renderPlatforms();
-    renderAddBar();
-    updateResChips();
-    if (activeIndex >= 0) {
+    <% if (streamState && streamState.activePlatformIndices && streamState.activePlatformIndices.length > 0) { %>
+      activePlatformIndices = <%- JSON.stringify(streamState.activePlatformIndices) %>;
       isLive = true;
-      selectedPlatformIndex = activeIndex;
-      updateLiveButton();
-    }
+      activePlatformIndices.forEach(i => selectedPlatformIndices.add(i));
+      streamStartTime = Date.now();
+      startUptimeTimer();
+    <% } %>
+    if (helpDismissed) document.getElementById('helpCard').classList.remove('visible');
+    renderAll();
     startPolling();
 
-    // --- Platform rendering ---
-    function renderPlatforms() {
-      const list = document.getElementById('platformList');
-      list.innerHTML = '';
+    // --- Pages ---
+    function switchPage(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById('page-' + page).classList.add('active');
+      document.querySelector('[data-page="' + page + '"]').classList.add('active');
+    }
+
+    function dismissHelp() {
+      document.getElementById('helpCard').classList.remove('visible');
+      helpDismissed = true;
+      localStorage.setItem('helpDismissed', '1');
+    }
+
+    // --- Render ---
+    function renderAll() {
+      renderDestCards();
+      renderAddSection();
+      renderDestSummary();
+      updateResChips();
+      updateLiveButton();
+      updateLiveUI();
+    }
+
+    function renderDestSummary() {
+      const container = document.getElementById('destSummary');
+      if (userPlatforms.length === 0) {
+        container.innerHTML = '<div class="dest-summary-title">Streaming To</div><div class="dest-chip-row"><button class="add-chip" style="padding:6px 12px;border-radius:16px;border:1px dashed #d1d1d6;background:#fff;font-size:13px;color:#86868b;cursor:pointer;" onclick="switchPage(\'destinations\')">+ Add a destination</button></div>';
+        return;
+      }
+      const chips = userPlatforms.map((p, i) => {
+        const plat = PLATFORMS[p.platformId] || PLATFORMS.custom;
+        const isActive = activePlatformIndices.includes(i);
+        const isSelected = selectedPlatformIndices.has(i);
+        let dotClass = 'ready';
+        if (isActive) dotClass = 'live';
+        else if (isSelected) dotClass = 'selected';
+        return '<div class="dest-chip ' + (isActive ? 'live' : isSelected ? 'selected' : '') + '" onclick="togglePlatformSelect(' + i + ')">' +
+          '<span>' + plat.icon + '</span><span>' + plat.name + '</span><span class="chip-dot ' + dotClass + '"></span>' +
+        '</div>';
+      }).join('');
+      container.innerHTML = '<div class="dest-summary-title">Streaming To</div><div class="dest-chip-row">' + chips + '</div>';
+    }
+
+    function togglePlatformSelect(i) {
+      if (isLive) return;
+      if (selectedPlatformIndices.has(i)) selectedPlatformIndices.delete(i);
+      else selectedPlatformIndices.add(i);
+      renderAll();
+    }
+
+    // --- Destination Card Stack ---
+    function renderDestCards() {
+      const stack = document.getElementById('destCardStack');
+      stack.innerHTML = '';
       userPlatforms.forEach((p, i) => {
         const plat = PLATFORMS[p.platformId] || PLATFORMS.custom;
-        const isActive = activeIndex === i;
+        const isActive = activePlatformIndices.includes(i);
         const hasConfig = p.rtmpUrl && p.streamKey;
+        const isSelected = selectedPlatformIndices.has(i);
+        const isOpen = openCardIndices.has(i);
+        const platInfo = PLATFORM_INFO[p.platformId] || PLATFORM_INFO.custom;
+
         const card = document.createElement('div');
-        card.className = 'platform-card' + (selectedPlatformIndex === i ? ' selected' : '') + (isActive ? ' is-live' : '');
-        card.innerHTML = `
-          <div class="platform-header" onclick="togglePlatformConfig(${i})">
-            <div class="platform-icon ${p.platformId}">${plat.icon}</div>
-            <div class="platform-info">
-              <div class="platform-name">${plat.name}</div>
-              <div class="platform-status ${isActive ? 'live' : hasConfig ? 'configured' : ''}">${isActive ? 'LIVE' : hasConfig ? 'Ready' : 'Not configured'}</div>
-            </div>
-            <div class="platform-toggle ${selectedPlatformIndex === i ? 'checked' : ''}" onclick="event.stopPropagation(); selectPlatform(${i})"></div>
-          </div>
-          <div class="platform-config ${selectedPlatformIndex === i ? 'open' : ''}" id="config-${i}">
-            <div class="field">
-              <label>RTMP Server URL</label>
-              <input type="text" placeholder="${plat.defaultUrl || 'rtmp://...'}"
-                value="${p.rtmpUrl || ''}"
-                oninput="updatePlatformField(${i}, 'rtmpUrl', this.value)" />
-            </div>
-            <div class="field">
-              <label>Stream Key</label>
-              <input type="text" placeholder="xxxx-xxxx-xxxx-xxxx"
-                value="${p.streamKey || ''}"
-                oninput="updatePlatformField(${i}, 'streamKey', this.value)" />
-            </div>
-            <button class="remove-btn" onclick="removePlatform(${i})">Remove destination</button>
-          </div>
-        `;
-        list.appendChild(card);
+        card.className = 'dest-card' + (isSelected ? ' selected' : '') + (isActive ? ' is-live' : '');
+
+        // Build warning banner HTML if needed
+        const warningHtml = platInfo.warning
+          ? '<div class="dest-card-warning"><span class="dest-card-warning-icon">&#9888;</span><div class="dest-card-warning-text">' + platInfo.warning + '</div></div>'
+          : '';
+
+        // Status text — show "Requires setup" for non-direct platforms without config
+        let statusText = isActive ? 'LIVE' : hasConfig ? 'Ready' : 'Not configured';
+        let statusClass = isActive ? 'live' : hasConfig ? 'configured' : '';
+        if (!platInfo.directPush && !hasConfig) {
+          statusText = 'Requires external setup';
+        }
+
+        card.innerHTML =
+          '<div class="dest-card-header" onclick="toggleCardExpand(' + i + ')">' +
+            '<div class="dest-card-icon ' + p.platformId + '">' + plat.icon + '</div>' +
+            '<div class="dest-card-info">' +
+              '<div class="dest-card-name">' + plat.name + '</div>' +
+              '<div class="dest-card-status ' + statusClass + '">' + statusText + '</div>' +
+            '</div>' +
+            '<div class="dest-card-toggle ' + (isSelected ? 'checked' : '') + '" onclick="event.stopPropagation(); togglePlatformSelect(' + i + ')"></div>' +
+            '<div class="dest-card-expand ' + (isOpen ? 'open' : '') + '">' +
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>' +
+            '</div>' +
+          '</div>' +
+          '<div class="dest-card-body ' + (isOpen ? 'open' : '') + '">' +
+            warningHtml +
+            '<div class="dest-card-fields">' +
+              '<div class="field">' +
+                '<label>Stream Title</label>' +
+                '<input type="text" class="title-input" placeholder="My awesome stream" value="' + escapeAttr(p.streamTitle || '') + '" oninput="updateField(' + i + ',\'streamTitle\',this.value)" />' +
+                '<div class="field-hint">' + platInfo.titleHint + '</div>' +
+              '</div>' +
+              '<div class="field">' +
+                '<label>RTMP Server URL</label>' +
+                '<input type="text" placeholder="' + escapeAttr(plat.defaultUrl || 'rtmp://...') + '" value="' + escapeAttr(p.rtmpUrl || '') + '" oninput="updateField(' + i + ',\'rtmpUrl\',this.value)" />' +
+              '</div>' +
+              '<div class="field">' +
+                '<label>Stream Key</label>' +
+                '<input type="password" placeholder="xxxx-xxxx-xxxx-xxxx" value="' + escapeAttr(p.streamKey || '') + '" onfocus="this.type=\'text\'" onblur="this.type=\'password\'" oninput="updateField(' + i + ',\'streamKey\',this.value)" />' +
+              '</div>' +
+            '</div>' +
+            '<div class="dest-card-footer">' +
+              '<button class="remove-btn" onclick="removePlatform(' + i + ')">Remove</button>' +
+            '</div>' +
+          '</div>';
+        stack.appendChild(card);
       });
-      updateLiveButton();
     }
 
-    function renderAddBar() {
-      const bar = document.getElementById('addBar');
+    function escapeAttr(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function toggleCardExpand(i) {
+      if (openCardIndices.has(i)) openCardIndices.delete(i);
+      else openCardIndices.add(i);
+      renderDestCards();
+    }
+
+    function renderAddSection() {
+      const section = document.getElementById('addSection');
       const used = new Set(userPlatforms.map(p => p.platformId));
-      bar.innerHTML = '';
-      Object.entries(PLATFORMS).forEach(([id, plat]) => {
-        // Allow multiple custom entries
-        if (used.has(id) && id !== 'custom') return;
-        const chip = document.createElement('button');
-        chip.className = 'add-chip';
-        chip.textContent = '+ ' + plat.name;
-        chip.onclick = () => addPlatform(id);
-        bar.appendChild(chip);
+      const available = Object.entries(PLATFORMS).filter(([id]) => !used.has(id) || id === 'custom');
+      if (available.length === 0) { section.innerHTML = ''; return; }
+
+      let html = '<div class="add-platform-title">Add Destination</div><div class="add-platform-grid">';
+      available.forEach(([id, plat]) => {
+        html += '<button class="add-platform-btn" onclick="addPlatform(\'' + id + '\')">' +
+          '<div class="add-icon dest-card-icon ' + id + '">' + plat.icon + '</div>' +
+          '<div class="add-label">' + plat.name + '</div>' +
+        '</button>';
       });
+      html += '</div>';
+      section.innerHTML = html;
     }
 
-    function addPlatform(platformId) {
-      const plat = PLATFORMS[platformId];
-      userPlatforms.push({
-        platformId,
-        rtmpUrl: plat.defaultUrl || '',
-        streamKey: '',
-        enabled: true,
-      });
-      selectedPlatformIndex = userPlatforms.length - 1;
-      renderPlatforms();
-      renderAddBar();
+    function addPlatform(id) {
+      const plat = PLATFORMS[id];
+      userPlatforms.push({ platformId: id, rtmpUrl: plat.defaultUrl || '', streamKey: '', streamTitle: '', enabled: true });
+      const newIdx = userPlatforms.length - 1;
+      selectedPlatformIndices.add(newIdx);
+      openCardIndices.add(newIdx);
+      renderAll();
       saveSettings();
     }
 
-    function removePlatform(index) {
-      userPlatforms.splice(index, 1);
-      if (selectedPlatformIndex === index) selectedPlatformIndex = -1;
-      else if (selectedPlatformIndex > index) selectedPlatformIndex--;
-      renderPlatforms();
-      renderAddBar();
+    function removePlatform(i) {
+      userPlatforms.splice(i, 1);
+      selectedPlatformIndices.delete(i);
+      openCardIndices.delete(i);
+      // Adjust indices
+      const newSelected = new Set();
+      selectedPlatformIndices.forEach(idx => { if (idx < i) newSelected.add(idx); else if (idx > i) newSelected.add(idx - 1); });
+      selectedPlatformIndices = newSelected;
+      const newOpen = new Set();
+      openCardIndices.forEach(idx => { if (idx < i) newOpen.add(idx); else if (idx > i) newOpen.add(idx - 1); });
+      openCardIndices = newOpen;
+      renderAll();
       saveSettings();
     }
 
-    function selectPlatform(index) {
-      selectedPlatformIndex = selectedPlatformIndex === index ? -1 : index;
-      renderPlatforms();
-    }
-
-    function togglePlatformConfig(index) {
-      const cfg = document.getElementById('config-' + index);
-      if (cfg) cfg.classList.toggle('open');
-    }
-
-    function updatePlatformField(index, field, value) {
-      userPlatforms[index][field] = value;
+    function updateField(i, field, val) {
+      userPlatforms[i][field] = val;
       saveSettings();
     }
 
@@ -487,79 +643,30 @@
       updateResChips();
       saveSettings();
     }
-
     function updateResChips() {
-      document.querySelectorAll('.res-chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.res === currentResolution);
-      });
+      document.querySelectorAll('.res-chip').forEach(c => c.classList.toggle('active', c.dataset.res === currentResolution));
+      document.getElementById('statResolution').textContent = currentResolution;
     }
 
-    // --- Settings panel toggle ---
-    function toggleSettings() {
-      const panel = document.getElementById('settingsPanel');
-      const btn = document.getElementById('settingsToggle');
-      const visible = panel.style.display !== 'none';
-      panel.style.display = visible ? 'none' : 'block';
-      btn.classList.toggle('active', !visible);
-    }
-
-    // --- Preview ---
-    function togglePreview() {
-      const section = document.getElementById('previewSection');
-      const btn = document.getElementById('previewToggle');
-      const visible = section.style.display !== 'none';
-      section.style.display = visible ? 'none' : 'block';
-      btn.classList.toggle('active', !visible);
-    }
-
-    async function toggleManagedStream() {
-      const btn = document.getElementById('previewBtn');
-      if (!managedStreamActive) {
-        btn.textContent = 'Starting...';
-        const result = await apiCall('/api/start-managed', 'POST');
-        if (result.success && result.urls) {
-          managedStreamActive = true;
-          btn.textContent = 'Stop Preview';
-          document.getElementById('previewBadge').classList.add('visible');
-          document.getElementById('previewPlaceholder').style.display = 'none';
-          // Try to play WebRTC or HLS
-          if (result.urls.webrtcUrl) {
-            loadWebRTCPreview(result.urls.webrtcUrl);
-          } else if (result.urls.hlsUrl) {
-            loadHLSPreview(result.urls.hlsUrl);
-          }
-        } else {
-          btn.textContent = 'Start Preview';
-        }
+    // --- Live UI ---
+    function updateLiveUI() {
+      document.getElementById('liveIndicator').classList.toggle('visible', isLive);
+      const badge = document.getElementById('previewBadge');
+      const timeEl = document.getElementById('previewTime');
+      if (isLive) {
+        badge.textContent = 'LIVE';
+        badge.className = 'preview-badge live-mode visible';
+        timeEl.classList.add('visible');
+      } else if (previewActive) {
+        badge.textContent = 'LIVE PREVIEW';
+        badge.className = 'preview-badge preview-mode visible';
+        timeEl.classList.remove('visible');
       } else {
-        await apiCall('/api/stop-managed', 'POST');
-        managedStreamActive = false;
-        btn.textContent = 'Start Preview';
-        document.getElementById('previewBadge').classList.remove('visible');
-        document.getElementById('previewPlaceholder').style.display = '';
-        document.getElementById('previewVideo').src = '';
+        badge.classList.remove('visible');
+        timeEl.classList.remove('visible');
       }
     }
 
-    function loadHLSPreview(url) {
-      const video = document.getElementById('previewVideo');
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = url;
-        video.play();
-      }
-      // Could load hls.js here for non-Safari browsers
-    }
-
-    function loadWebRTCPreview(url) {
-      // WebRTC preview would need WHEP client — placeholder for now
-      const video = document.getElementById('previewVideo');
-      const placeholder = document.getElementById('previewPlaceholder');
-      placeholder.style.display = '';
-      placeholder.innerHTML = '<div>Preview stream active<br><small style="color:#888">WebRTC URL copied to clipboard</small></div>';
-      navigator.clipboard.writeText(url).catch(() => {});
-    }
-
-    // --- Go Live ---
     function updateLiveButton() {
       const btn = document.getElementById('liveBtn');
       if (isLive) {
@@ -569,45 +676,170 @@
       } else {
         btn.className = 'btn-live start';
         btn.textContent = 'Go Live';
-        const selected = userPlatforms[selectedPlatformIndex];
-        btn.disabled = !selected || !selected.rtmpUrl || !selected.streamKey;
+        const ready = [...selectedPlatformIndices].some(i => {
+          const p = userPlatforms[i];
+          return p && p.rtmpUrl && p.streamKey;
+        });
+        btn.disabled = !ready;
       }
     }
 
+    function startUptimeTimer() {
+      if (uptimeInterval) clearInterval(uptimeInterval);
+      uptimeInterval = setInterval(() => {
+        if (!streamStartTime) return;
+        const elapsed = Math.floor((Date.now() - streamStartTime) / 1000);
+        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        document.getElementById('statUptime').textContent = m + ':' + s;
+        document.getElementById('previewTime').textContent = m + ':' + s;
+      }, 1000);
+    }
+
+    // --- Preview ---
+    async function handlePreviewTap() {
+      if (previewLoading || isLive) return;
+      if (previewActive) { stopPreview(); return; }
+
+      previewLoading = true;
+      document.getElementById('previewText').textContent = 'Starting camera...';
+      const result = await apiCall('/api/preview', 'POST');
+      previewLoading = false;
+
+      if (result.success) {
+        previewActive = true;
+        updateLiveUI();
+        document.getElementById('previewText').textContent = 'Waiting for stream...';
+        startPreviewPoll();
+      } else {
+        document.getElementById('previewText').textContent = result.error || 'Failed — tap to retry';
+      }
+    }
+
+    function startPreviewPoll() {
+      if (previewPollId) clearInterval(previewPollId);
+      let attempts = 0;
+      previewPollId = setInterval(async () => {
+        attempts++;
+        const data = await apiCall('/api/status', 'GET');
+        const hlsUrl = data.urls?.hlsUrl;
+
+        if (data.status === 'active' && hlsUrl) {
+          clearInterval(previewPollId); previewPollId = null;
+          connectHLS(hlsUrl);
+        } else if (data.status === 'error') {
+          clearInterval(previewPollId); previewPollId = null;
+          document.getElementById('previewText').textContent = 'Error — tap to retry';
+          previewActive = false; updateLiveUI();
+        } else if (attempts > 30) {
+          clearInterval(previewPollId); previewPollId = null;
+          document.getElementById('previewText').textContent = 'Timeout — tap to retry';
+          previewActive = false; updateLiveUI();
+        } else {
+          document.getElementById('previewText').textContent = 'Waiting for stream... (' + attempts + 's)';
+        }
+      }, 1500);
+    }
+
+    function connectHLS(hlsUrl) {
+      const video = document.getElementById('previewVideo');
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
+        video.play().catch(() => {});
+        document.getElementById('previewOverlay').classList.add('hidden');
+        return;
+      }
+      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+        if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+        hlsPlayer = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 5 });
+        hlsPlayer.loadSource(hlsUrl);
+        hlsPlayer.attachMedia(video);
+        hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+          document.getElementById('previewOverlay').classList.add('hidden');
+        });
+        hlsPlayer.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal) {
+            document.getElementById('previewOverlay').classList.remove('hidden');
+            document.getElementById('previewText').textContent = 'Playback error — tap to retry';
+            previewActive = false; updateLiveUI();
+          }
+        });
+        return;
+      }
+      document.getElementById('previewText').textContent = 'Browser does not support HLS';
+    }
+
+    function stopPreview() {
+      if (previewPollId) { clearInterval(previewPollId); previewPollId = null; }
+      if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+      document.getElementById('previewVideo').src = '';
+      document.getElementById('previewOverlay').classList.remove('hidden');
+      document.getElementById('previewText').textContent = 'Tap to start preview';
+      apiCall('/api/stop', 'POST');
+      previewActive = false;
+      updateLiveUI();
+    }
+
+    // --- Go Live ---
     async function goLive() {
       const btn = document.getElementById('liveBtn');
       document.getElementById('errorText').textContent = '';
 
       if (isLive) {
-        btn.disabled = true;
-        btn.textContent = 'Stopping...';
+        btn.disabled = true; btn.textContent = 'Stopping...';
         const result = await apiCall('/api/stop', 'POST');
         if (result.success) {
-          isLive = false;
-          activeIndex = -1;
-          renderPlatforms();
+          isLive = false; activePlatformIndices = [];
+          streamStartTime = null;
+          if (uptimeInterval) clearInterval(uptimeInterval);
+          document.getElementById('statUptime').textContent = '--';
+          document.getElementById('statBitrate').textContent = '--';
+          document.getElementById('statHealth').textContent = '--';
+          document.getElementById('statStatus').textContent = 'Idle';
+          document.getElementById('statStatus').className = 'stat-value';
+          if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+          document.getElementById('previewVideo').src = '';
+          document.getElementById('previewOverlay').classList.remove('hidden');
+          document.getElementById('previewText').textContent = 'Tap to start preview';
+          previewActive = false;
+          renderAll();
         } else {
           document.getElementById('errorText').textContent = result.error;
-          btn.disabled = false;
-          btn.textContent = 'Stop Stream';
+          btn.disabled = false; btn.textContent = 'Stop Stream';
         }
         return;
       }
 
-      if (selectedPlatformIndex < 0) return;
-      await saveSettings();
-      btn.disabled = true;
-      btn.textContent = 'Connecting...';
+      const indices = [...selectedPlatformIndices].filter(i => {
+        const p = userPlatforms[i];
+        return p && p.rtmpUrl && p.streamKey;
+      });
+      if (indices.length === 0) return;
 
-      const result = await apiCall('/api/start', 'POST', { platformIndex: selectedPlatformIndex });
+      await saveSettings();
+      btn.disabled = true; btn.textContent = 'Connecting...';
+
+      const result = await apiCall('/api/go-live', 'POST', { platformIndices: indices });
       if (result.success) {
         isLive = true;
-        activeIndex = selectedPlatformIndex;
-        renderPlatforms();
+        activePlatformIndices = indices;
+        streamStartTime = Date.now();
+        startUptimeTimer();
+
+        if (result.urls?.hlsUrl) {
+          previewActive = true;
+          document.getElementById('previewText').textContent = 'Connecting preview...';
+          setTimeout(() => connectHLS(result.urls.hlsUrl), 5000);
+        } else {
+          previewActive = true;
+          startPreviewPoll();
+        }
+
+        renderAll();
       } else {
         document.getElementById('errorText').textContent = result.error;
-        btn.disabled = false;
-        btn.textContent = 'Go Live';
+        btn.disabled = false; btn.textContent = 'Go Live';
       }
     }
 
@@ -615,54 +847,45 @@
     async function apiCall(endpoint, method, body) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
       if (body) opts.body = JSON.stringify(body);
-      try {
-        const res = await fetch(endpoint, opts);
-        return await res.json();
-      } catch (e) {
-        return { error: e.message };
-      }
+      try { return await (await fetch(endpoint, opts)).json(); }
+      catch (e) { return { error: e.message }; }
     }
 
     async function saveSettings() {
-      await apiCall('/api/settings', 'POST', {
-        resolution: currentResolution,
-        platforms: userPlatforms,
-      });
+      await apiCall('/api/settings', 'POST', { resolution: currentResolution, platforms: userPlatforms });
     }
 
     // --- Polling ---
     function startPolling() {
-      if (polling) return;
-      polling = setInterval(async () => {
+      setInterval(async () => {
         try {
           const data = await apiCall('/api/status', 'GET');
-          if (data.streamStatus) updateStatus(data.streamStatus);
-          if (data.activeIndex !== undefined) {
+          if (data.status) updateStats(data);
+          if (data.activePlatformIndices) {
             const wasLive = isLive;
-            activeIndex = data.activeIndex;
-            isLive = activeIndex >= 0;
-            if (wasLive !== isLive) renderPlatforms();
-            updateLiveButton();
+            activePlatformIndices = data.activePlatformIndices;
+            isLive = activePlatformIndices.length > 0;
+            if (wasLive !== isLive) {
+              if (isLive && !streamStartTime) { streamStartTime = Date.now(); startUptimeTimer(); }
+              if (!isLive) { streamStartTime = null; if (uptimeInterval) clearInterval(uptimeInterval); }
+              renderAll();
+            }
           }
-        } catch (e) { /* ignore */ }
+          if (isLive && data.urls?.hlsUrl && !document.getElementById('previewOverlay').classList.contains('hidden') && previewActive) {
+            connectHLS(data.urls.hlsUrl);
+          }
+        } catch (e) {}
       }, 3000);
     }
 
-    function updateStatus(status) {
-      const dot = document.getElementById('statusDot');
-      const label = document.getElementById('statusLabel');
-      const s = status?.status || 'stopped';
-      dot.className = 'status-dot ' + s;
-      const labels = {
-        stopped: 'Ready',
-        initializing: 'Connecting...',
-        active: 'LIVE',
-        streaming: 'LIVE',
-        error: 'Error',
-        reconnecting: 'Reconnecting...',
-      };
-      label.textContent = labels[s] || s;
-      label.className = 'status-label' + (s === 'active' || s === 'streaming' ? ' live' : '');
+    function updateStats(data) {
+      const s = data.status || 'stopped';
+      const statusEl = document.getElementById('statStatus');
+      const labels = { stopped: 'Idle', initializing: 'Starting', active: 'Live', streaming: 'Live', error: 'Error', reconnecting: 'Reconnect' };
+      statusEl.textContent = labels[s] || s;
+      statusEl.className = 'stat-value' + (s === 'active' || s === 'streaming' ? ' live' : '') + (s === 'error' ? ' error' : '');
+      if (s === 'active' || s === 'streaming') document.getElementById('statHealth').textContent = 'Good';
+      else if (s === 'error') document.getElementById('statHealth').textContent = 'Error';
     }
   </script>
 </body>
