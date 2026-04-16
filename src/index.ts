@@ -14,6 +14,14 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const PACKAGE_NAME = process.env.PACKAGE_NAME;
 const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY;
 
+/** Managed stream max length (seconds). SDK `stream.durationLimit`; if omitted, cloud may use a short default (~1 min). */
+function streamDurationLimitSeconds(): number {
+  const raw = process.env.STREAM_MAX_DURATION_SECONDS;
+  const n = raw ? parseInt(raw, 10) : 4 * 60 * 60;
+  if (!Number.isFinite(n) || n < 60) return 4 * 60 * 60;
+  return Math.min(n, 24 * 60 * 60);
+}
+
 // Resolution presets — all 16:9 for platform compatibility
 const RESOLUTION_PRESETS = {
   '720p': { width: 1280, height: 720, bitrate: 2500000, frameRate: 30 },
@@ -48,6 +56,7 @@ interface StreamUrls {
   webrtcUrl?: string;
   streamId?: string;
   previewUrl?: string;
+  thumbnailUrl?: string;
 }
 
 interface UserStreamState {
@@ -64,6 +73,25 @@ interface UserPersistentSettings {
   resolution: ResolutionPreset;
   platforms: PlatformConfig[];
 }
+
+/** Same video/audio as go-live so preview and live use one pipeline (matches @mentra/sdk patterns). */
+type ManagedStreamBaseOptions = {
+  quality?: '720p' | '1080p';
+  enableWebRTC?: boolean;
+  video: {
+    width: number;
+    height: number;
+    bitrate: number;
+    frameRate: number;
+  };
+  audio: {
+    bitrate: number;
+    sampleRate: number;
+    echoCancellation: boolean;
+    noiseSuppression: boolean;
+  };
+  stream: { durationLimit: number };
+};
 
 class MentraStreamDeck extends AppServer {
   private activeUserStates: Map<string, UserStreamState> = new Map();
@@ -118,6 +146,44 @@ class MentraStreamDeck extends AppServer {
     };
   }
 
+  private managedStreamBaseOptions(userId: string): ManagedStreamBaseOptions {
+    const settings = this.getSettingsForUser(userId);
+    const preset = RESOLUTION_PRESETS[settings.resolution];
+    const video = {
+      width: preset.width,
+      height: preset.height,
+      bitrate: preset.bitrate,
+      frameRate: preset.frameRate,
+    };
+    const audio = {
+      bitrate: 128000,
+      sampleRate: 44100,
+      echoCancellation: true,
+      noiseSuppression: true,
+    };
+    const enableWebRTC = true;
+    const stream = { durationLimit: streamDurationLimitSeconds() };
+    if (settings.resolution === '720p') {
+      return { quality: '720p', enableWebRTC, video, audio, stream };
+    }
+    return { enableWebRTC, video, audio, stream };
+  }
+
+  /**
+   * CameraManagedExtension throws if startManagedStream runs while isManagedStreamActive().
+   * stopManagedStream() is async to the glasses; wait until the SDK clears active state.
+   */
+  private async waitUntilManagedStreamStopped(session: TpaSession, maxMs = 20000): Promise<void> {
+    const step = 100;
+    const deadline = Date.now() + maxMs;
+    while (session.camera.isManagedStreamActive() && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, step));
+    }
+    if (session.camera.isManagedStreamActive()) {
+      throw new Error('Previous stream did not stop in time. Try again.');
+    }
+  }
+
   // Start preview only (managed stream, no restream destinations)
   public async startPreviewForUser(userId: string): Promise<StreamUrls> {
     const state = this.activeUserStates.get(userId);
@@ -125,7 +191,8 @@ class MentraStreamDeck extends AppServer {
 
     state.streamStatus = 'initializing';
     state.session.layouts.showTextWall('Starting preview...');
-    const urls = await state.session.camera.startManagedStream();
+    const base = this.managedStreamBaseOptions(userId);
+    const urls = await state.session.camera.startManagedStream(base);
     state.streamUrls = urls;
     state.streamStatus = 'active';
     return urls;
@@ -137,7 +204,7 @@ class MentraStreamDeck extends AppServer {
     if (!state) throw new Error('No active session');
 
     const settings = this.getSettingsForUser(userId);
-    const preset = RESOLUTION_PRESETS[settings.resolution];
+    const base = this.managedStreamBaseOptions(userId);
 
     // Build restream destinations from selected platforms
     const restreamDestinations = platformIndices.map(i => {
@@ -158,25 +225,19 @@ class MentraStreamDeck extends AppServer {
     state.activePlatformIndices = platformIndices;
     state.streamStatus = 'initializing';
 
-    // Stop existing managed stream first if running (preview)
-    try { await state.session.camera.stopManagedStream(); } catch (e) { /* ignore */ }
+    // Stop existing managed stream first if running (preview). SDK requires inactive state before a new startManagedStream.
+    try {
+      await state.session.camera.stopManagedStream();
+    } catch (e) {
+      /* ignore */
+    }
+    await this.waitUntilManagedStreamStopped(state.session);
 
     // Start managed stream with restream destinations
     // This gives us HLS preview URL AND forwards to all RTMP destinations
     const urls = await state.session.camera.startManagedStream({
+      ...base,
       restreamDestinations,
-      video: {
-        width: preset.width,
-        height: preset.height,
-        bitrate: preset.bitrate,
-        frameRate: preset.frameRate,
-      },
-      audio: {
-        bitrate: 128000,
-        sampleRate: 44100,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
     });
 
     state.streamUrls = urls;
@@ -224,6 +285,9 @@ class MentraStreamDeck extends AppServer {
           if (status.hlsUrl) s.streamUrls = { ...s.streamUrls, hlsUrl: status.hlsUrl };
           if (status.dashUrl) s.streamUrls = { ...s.streamUrls, dashUrl: status.dashUrl };
           if (status.webrtcUrl) s.streamUrls = { ...s.streamUrls, webrtcUrl: status.webrtcUrl };
+          if (status.previewUrl) s.streamUrls = { ...s.streamUrls, previewUrl: status.previewUrl };
+          if (status.thumbnailUrl) s.streamUrls = { ...s.streamUrls, thumbnailUrl: status.thumbnailUrl };
+          if (status.streamId) s.streamUrls = { ...s.streamUrls, streamId: status.streamId };
 
           switch (status.status) {
             case 'active':

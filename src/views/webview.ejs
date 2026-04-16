@@ -34,7 +34,7 @@
       overflow: hidden; aspect-ratio: 16/9; position: relative;
       cursor: pointer;
     }
-    .preview-container video { width: 100%; height: 100%; object-fit: contain; }
+    .preview-container video, .preview-container iframe#previewIframe { width: 100%; height: 100%; object-fit: contain; }
     .preview-overlay {
       position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; color: #666;
@@ -296,6 +296,7 @@
     <!-- Preview -->
     <div class="preview-wrap">
       <div class="preview-container" id="previewContainer" onclick="handlePreviewTap()">
+        <iframe id="previewIframe" title="Stream preview" style="display:none;width:100%;height:100%;border:0;background:#000" allow="autoplay; fullscreen" referrerpolicy="no-referrer-when-downgrade"></iframe>
         <video id="previewVideo" autoplay muted playsinline></video>
         <div class="preview-overlay" id="previewOverlay">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -758,12 +759,9 @@
         previewActive = true;
         updateLiveUI();
         requestWakeLock();
-        if (result.urls?.hlsUrl) {
-          // HLS URL returned directly — connect after short delay for segments
-          document.getElementById('previewText').textContent = 'Connecting preview...';
-          setTimeout(() => connectHLS(result.urls.hlsUrl), 3000);
+        if (result.urls?.previewUrl || result.urls?.hlsUrl) {
+          connectPreviewPlayback(result.urls);
         } else {
-          // Fall back to polling if URL not in response
           document.getElementById('previewText').textContent = 'Waiting for stream...';
           startPreviewPoll();
         }
@@ -778,11 +776,11 @@
       previewPollId = setInterval(async () => {
         attempts++;
         const data = await apiCall('/api/status', 'GET');
-        const hlsUrl = data.urls?.hlsUrl;
+        const urls = data.urls || {};
 
-        if (data.status === 'active' && hlsUrl) {
+        if (data.status === 'active' && (urls.previewUrl || urls.hlsUrl)) {
           clearInterval(previewPollId); previewPollId = null;
-          connectHLS(hlsUrl);
+          connectPreviewPlayback(urls);
         } else if (data.status === 'error') {
           clearInterval(previewPollId); previewPollId = null;
           document.getElementById('previewText').textContent = 'Error — tap to retry';
@@ -800,7 +798,40 @@
     let hlsRetryCount = 0;
     const HLS_MAX_RETRIES = 5;
 
+    function hidePreviewIframe() {
+      const f = document.getElementById('previewIframe');
+      f.style.display = 'none';
+      f.removeAttribute('src');
+      document.getElementById('previewVideo').style.display = '';
+    }
+
+    /** Prefer Cloudflare embed URL from Mentra when present (often more reliable in webviews than raw HLS). */
+    function connectPreviewPlayback(urls) {
+      if (urls && urls.previewUrl) {
+        const f = document.getElementById('previewIframe');
+        const v = document.getElementById('previewVideo');
+        v.style.display = 'none';
+        if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+        v.removeAttribute('src');
+        f.style.display = 'block';
+        f.src = urls.previewUrl;
+        document.getElementById('previewOverlay').classList.add('hidden');
+        document.getElementById('previewText').textContent = '';
+        hlsRetryCount = 0;
+        return;
+      }
+      hidePreviewIframe();
+      if (urls && urls.hlsUrl) {
+        document.getElementById('previewText').textContent = 'Connecting preview...';
+        setTimeout(() => connectHLS(urls.hlsUrl), 500);
+      } else {
+        document.getElementById('previewText').textContent = 'Waiting for stream...';
+        startPreviewPoll();
+      }
+    }
+
     function connectHLS(hlsUrl) {
+      hidePreviewIframe();
       const video = document.getElementById('previewVideo');
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = hlsUrl;
@@ -843,6 +874,7 @@
     function stopPreview() {
       if (previewPollId) { clearInterval(previewPollId); previewPollId = null; }
       if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+      hidePreviewIframe();
       document.getElementById('previewVideo').src = '';
       document.getElementById('previewOverlay').classList.remove('hidden');
       document.getElementById('previewText').textContent = 'Tap to start preview';
@@ -900,12 +932,12 @@
         startUptimeTimer();
         requestWakeLock();
 
-        if (result.urls?.hlsUrl) {
+        if (result.urls?.previewUrl || result.urls?.hlsUrl) {
           previewActive = true;
-          document.getElementById('previewText').textContent = 'Connecting preview...';
-          setTimeout(() => connectHLS(result.urls.hlsUrl), 5000);
+          connectPreviewPlayback(result.urls);
         } else {
           previewActive = true;
+          document.getElementById('previewText').textContent = 'Waiting for stream...';
           startPreviewPoll();
         }
 
