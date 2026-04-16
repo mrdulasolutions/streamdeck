@@ -721,6 +721,29 @@
       }, 1000);
     }
 
+    // --- Wake Lock (prevents screen lock while streaming) ---
+    let wakeLock = null;
+
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+        console.log('Wake Lock acquired — screen will stay on');
+      } catch (e) { console.warn('Wake Lock failed:', e.message); }
+    }
+
+    async function releaseWakeLock() {
+      if (wakeLock) { await wakeLock.release(); wakeLock = null; }
+    }
+
+    // Re-acquire wake lock when tab becomes visible again
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && (isLive || previewActive)) {
+        await requestWakeLock();
+      }
+    });
+
     // --- Preview ---
     async function handlePreviewTap() {
       if (previewLoading || isLive) return;
@@ -734,6 +757,7 @@
       if (result.success) {
         previewActive = true;
         updateLiveUI();
+        requestWakeLock();
         document.getElementById('previewText').textContent = 'Waiting for stream...';
         startPreviewPoll();
       } else {
@@ -803,6 +827,7 @@
       document.getElementById('previewText').textContent = 'Tap to start preview';
       apiCall('/api/stop', 'POST');
       previewActive = false;
+      releaseWakeLock();
       updateLiveUI();
     }
 
@@ -828,6 +853,7 @@
           document.getElementById('previewOverlay').classList.remove('hidden');
           document.getElementById('previewText').textContent = 'Tap to start preview';
           previewActive = false;
+          releaseWakeLock();
           renderAll();
         } else {
           document.getElementById('errorText').textContent = result.error;
@@ -851,6 +877,7 @@
         activePlatformIndices = indices;
         streamStartTime = Date.now();
         startUptimeTimer();
+        requestWakeLock();
 
         if (result.urls?.hlsUrl) {
           previewActive = true;

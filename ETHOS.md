@@ -2,27 +2,25 @@
 
 ## Why This Exists
 
-StreamDeck was born out of frustration — and then out of determination.
+StreamDeck started because we saw an opportunity to contribute to the MentraOS ecosystem.
 
-We bought Mentra Live glasses for one reason: livestreaming. Day one, the built-in streaming app didn't work. Black screen on every platform. $300 hardware, and the flagship feature was broken.
+We got our Mentra Live glasses with livestreaming as the primary use case. While testing, we ran into issues getting a stable stream to render on platforms like YouTube, Twitch, and X. Rather than wait on the sidelines, we decided to build a solution ourselves -- something the whole community could use.
 
-Instead of waiting for a fix or returning the glasses, we built our own.
+MentraOS is open source, and that openness is exactly what made StreamDeck possible.
 
 ## What We Believe
 
-**Hardware should work on day one.** When someone pays for a product, the core advertised feature should function. When it doesn't, the community should be empowered to fix it themselves.
+**Open source hardware deserves open source apps.** MentraOS gives developers full access to the SDK, the docs, and the tools to build real apps for smart glasses. StreamDeck is our way of giving back to that ecosystem.
 
-**Open source is the answer.** MentraOS is open source, and that's exactly what made this possible. We used their SDK, their docs, their example repos — and built something that works. This is the promise of open-source hardware platforms: when the official app falls short, anyone can build a better one.
+**Community contributions make platforms stronger.** The best hardware platforms grow because their communities build on top of them. We used Mentra's SDK and managed streaming pipeline to create something that extends what the glasses can do -- and we're sharing it so others can build on it too.
 
-**Fix it, then share it.** We didn't just fix our own problem. We open-sourced the solution so every Mentra Live owner hitting the same black screen can stream on day one too.
-
-**Keep it simple.** This app does one thing: stream from your Mentra glasses to wherever you want, in the right format, reliably. No bloat. No accounts. No subscriptions.
+**Keep it simple.** StreamDeck does one thing: stream from your Mentra glasses to wherever you want, in the right format, reliably. No bloat. No accounts. No subscriptions.
 
 ## The Technical Story
 
-The built-in Mentra Streaming app sends video in non-standard resolutions (720x480, 960x540 — 3:2 aspect ratio) that platforms like X, YouTube, and Twitch reject or can't render. The RTMP transport layer shows "excellent" health, but the video never appears.
+Some streaming platforms are strict about the resolutions they accept. Non-16:9 aspect ratios (like 720x480 or 960x540) can cause playback issues or black screens on certain services. StreamDeck addresses this by enforcing proper 1280x720 16:9 output at 30fps with correct encoding parameters, ensuring compatibility across all major platforms.
 
-StreamDeck forces proper 1280x720 16:9 output at 30fps with correct encoding parameters. That's it. That's the fix.
+It is a straightforward fix that makes a real difference for anyone streaming from their glasses.
 
 ## Our Commitment
 
